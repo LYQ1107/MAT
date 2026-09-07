@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Callable, Any
 import re
 import hashlib
+import numpy as np
 
 from mat.core.types import FramePacket, SessionSpec
 from mat.core.errors import ValidationError
-from mat.data.base import DatasetInventory, ManifestBundle, bounded_files, dataset_uid, neutral_uid, IMAGE_SUFFIXES, VIDEO_SUFFIXES, ARCHIVE_SUFFIXES
+from mat.data.base import DatasetInventory, ManifestBundle, bounded_files, dataset_uid, neutral_uid, neutral_tracklet_uid, IMAGE_SUFFIXES, VIDEO_SUFFIXES, ARCHIVE_SUFFIXES
 from mat.data.manifests import write_jsonl, iter_manifest_records
 
 
@@ -50,11 +51,12 @@ def build_common_manifests(dataset_name: str, raw_root: Path, output_root: Path,
         session_uid, camera_uid, timestamp = _session_from(path, dataset_name, ordinal)
         uid = neutral_uid(dataset_name, ordinal)
         object_ref = f"object://{dataset_name}/{uid}"
+        tracklet_uid = neutral_tracklet_uid(dataset_name, str(path.parent.relative_to(raw_root)))
         row = {
             "schema_version": "mat.observation.v1", "observation_uid": uid,
             "frame_uid": f"{session_uid}:{ordinal}", "session_uid": session_uid,
             "dataset_uid": inv.dataset_uid, "cohort_uid": f"{dataset_name}:cohort:unresolved", "camera_uid": camera_uid,
-            "frame_index": ordinal, "timestamp_s": timestamp, "image_ref": object_ref,
+            "frame_index": ordinal, "timestamp_s": timestamp, "image_ref": object_ref, "tracklet_uid": tracklet_uid,
             "input_mode": "prelocalized_crops",
         }
         observations.append(row)
@@ -88,3 +90,36 @@ def records_to_frames(session: SessionSpec, records: list[dict[str, Any]], image
             raise ValidationError("neutral manifest requires an explicit image_loader for pixel access")
         yield FramePacket(row.get("dataset_uid", "unknown"), session.cohort_uid, session.session_uid,
                           session.camera_uid, int(row["frame_index"]), float(row["timestamp_s"]), rgb)
+
+
+def iter_session_frames(session: SessionSpec):
+    """Resolve neutral object handles inside the explicitly supplied raw root.
+
+    The caller can provide ``timebase.raw_root`` (a user-authorized path) and the
+    manifest's sibling private object index. Neither path nor provider labels cross
+    the FramePacket boundary.
+    """
+    raw_root = session.timebase.get("raw_root") if isinstance(session.timebase, dict) else None
+    if not raw_root:
+        raise ValidationError("SessionSpec.timebase.raw_root is required to resolve neutral objects")
+    raw_root = Path(raw_root).resolve()
+    index_path = session.observations_manifest.with_name("private_object_index.jsonl")
+    object_index = {row["object_ref"]: row["relative_source"] for row in iter_manifest_records(index_path)} if index_path.exists() else {}
+
+    def load(ref):
+        source = object_index.get(ref)
+        if source is None:
+            raise ValidationError(f"object handle not found in private index: {ref}")
+        path = (raw_root / source).resolve()
+        try:
+            path.relative_to(raw_root)
+        except ValueError as exc:
+            raise ValidationError("private object index escapes raw root") from exc
+        try:
+            from PIL import Image
+            with Image.open(path) as image:
+                return np.asarray(image.convert("RGB"), dtype=np.uint8)
+        except ImportError as exc:  # pragma: no cover
+            raise ValidationError("Pillow is required to decode prepared image observations") from exc
+
+    yield from records_to_frames(session, list(iter_manifest_records(session.observations_manifest)), load)

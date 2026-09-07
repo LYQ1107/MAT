@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from .common import inspect_files, build_common_manifests, records_to_frames
+from .common import inspect_files, build_common_manifests, iter_session_frames
 from mat.data.base import DatasetInventory, ManifestBundle
 from mat.data.manifests import iter_manifest_records
 from mat.core.types import SessionSpec
@@ -33,5 +33,4 @@ class RatIDAdapter:
         return build_common_manifests(self.dataset_name, raw_root, output_root, inv, self._truth)
 
     def iter_observations(self, session: SessionSpec):
-        return iter(())
-
+        return iter_session_frames(session)

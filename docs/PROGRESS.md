@@ -12,6 +12,7 @@
 - 锁定已核查上游 commit；记录 DLC/ByteTrack/WildlifeTools 实际签名，未编造不在源码中的接口。
 - 实现 DirectOnlyPolicy、限额 probe/fetch、重定向白名单、Range 续传保护、checksum/SHA-256、zip-slip 检查、原子 receipt 和授权本地 import。
 - 实现中性数据契约、Rat/PigReID/PigTracking/MultiCamCows 适配器、冻结 split、ByteTrack 检测索引边界、冻结身份特征接口、部位/冲突匹配、anchor/quarantine/commit registry、固定 S0 mapping 评价和标注包边界。
+- 新增 `run_prelocalized_b0` 可执行链（仅接受中性 rows、冻结 encoder、S0 gallery 和 query sessions）；TEST_FIXTURE 端到端 smoke 已通过，但不计入真实 B0 指标。
 - 研究分支 `research/longitudinal-mat` 当前本地/远端 SHA：见本文件更新提交后的 `git rev-parse HEAD`（每次 push 后用 `git ls-remote origin refs/heads/research/longitudinal-mat` 核对）；main 保留安全基线 `78e7ae4`。
 
 ## 未运行/真实结果

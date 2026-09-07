@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .common import inspect_files, build_common_manifests
+from .common import inspect_files, build_common_manifests, iter_session_frames
 from mat.data.base import DatasetInventory, ManifestBundle
 from mat.core.types import SessionSpec
 
@@ -28,5 +28,4 @@ class MultiCamCowsAdapter:
         return build_common_manifests(self.dataset_name, raw_root, output_root, inv, self._truth)
 
     def iter_observations(self, session: SessionSpec):
-        return iter(())
-
+        return iter_session_frames(session)

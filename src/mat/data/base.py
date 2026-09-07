@@ -70,3 +70,6 @@ def bounded_files(raw_root: Path) -> list[Path]:
 def neutral_uid(dataset: str, ordinal: int, rel_suffix: str = "") -> str:
     return hashlib.sha256(f"{dataset}:observation:{ordinal}:{rel_suffix}".encode()).hexdigest()[:24]
 
+
+def neutral_tracklet_uid(dataset: str, parent_token: str) -> str:
+    return hashlib.sha256(f"{dataset}:tracklet:{parent_token}".encode()).hexdigest()[:24]

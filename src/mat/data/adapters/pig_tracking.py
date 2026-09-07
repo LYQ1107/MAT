@@ -4,7 +4,7 @@ from pathlib import Path
 import configparser
 import re
 
-from .common import inspect_files, build_common_manifests
+from .common import inspect_files, build_common_manifests, iter_session_frames
 from mat.data.base import DatasetInventory, ManifestBundle
 from mat.core.types import SessionSpec
 
@@ -37,5 +37,4 @@ class PigTrackingAdapter:
         return bundle
 
     def iter_observations(self, session: SessionSpec):
-        return iter(())
-
+        return iter_session_frames(session)

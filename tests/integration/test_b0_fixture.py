@@ -7,6 +7,8 @@ from mat.enrollment.automatic import AutoRegistrar
 from mat.identity.gallery import GalleryStore
 from mat.identity.matching import PersistentMatcher, MatchingPolicy
 from mat.identity.conflicts import ConflictGraphBuilder
+from mat.backends.wildlife import NumpyFixtureEncoder
+from mat.experiments.b0 import run_prelocalized_b0
 
 
 class Reference:
@@ -34,3 +36,10 @@ def test_b0_reference_gallery_and_query_chain(tmp_path):
     assert assignments[0].persistent_uid in snapshot.identities
     gallery.close()
 
+
+def test_b0_runner_rejects_gt_in_model_rows(tmp_path):
+    store = GalleryStore(tmp_path / "registry.sqlite")
+    result = run_prelocalized_b0([{"observation_uid": "o", "session_uid": "s0", "image": np.zeros((4, 4, 3), np.uint8), "gt_id": "secret"}],
+                                 NumpyFixtureEncoder(), store, "s0", ["s1"])
+    assert result.status == "FAILED_LEAKAGE_CONTRACT"
+    store.close()
