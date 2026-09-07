@@ -1,0 +1,55 @@
+schema_version: mat.asset_catalog.v1
+network: direct_only
+assets:
+  - asset_id: rat_id_v1
+    url: https://zenodo.org/records/15112879
+    metadata_url: https://zenodo.org/api/records/15112879
+    role: prelocalized cross-session identity diagnostic
+    license: null
+    expected_bytes: null
+    provider_checksum: bb58d79cee8d87ed0c10b3aa84eff3f0
+    checksum_algorithm: md5
+    source_revision: zenodo:15112879
+    allowed_hosts: [zenodo.org, files.zenodo.org]
+    max_bytes: 9663676416
+    phase: P1
+    download_url_verified: false
+  - asset_id: pig_reid_v1
+    url: https://zenodo.org/records/18224572
+    metadata_url: https://zenodo.org/api/records/18224572
+    role: preprocessed single-animal cross-day identity crops
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: zenodo:18224572
+    allowed_hosts: [zenodo.org, files.zenodo.org]
+    max_bytes: 53687091200
+    phase: P1
+    download_url_verified: false
+  - asset_id: pig_tracking_5fps
+    url: https://zenodo.org/records/18155637
+    metadata_url: https://zenodo.org/api/records/18155637
+    role: group video local MOT; persistent map must be verified separately
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: zenodo:18155637
+    allowed_hosts: [zenodo.org, files.zenodo.org]
+    max_bytes: 28856811520
+    phase: P2
+    download_url_verified: false
+  - asset_id: multicamcows2024_archive
+    url: https://data.bris.ac.uk/data/dataset/2inu67jru7a6821kkgehxg3cv2
+    metadata_url: https://data.bris.ac.uk/datasets/2inu67jru7a6821kkgehxg3cv2/readme.txt
+    role: multi-day/camera cow identity and original-video candidate
+    license: Non-Commercial Government Licence for public sector information
+    expected_bytes: 39270266920
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: data.bris:2inu67jru7a6821kkgehxg3cv2
+    allowed_hosts: [data.bris.ac.uk]
+    max_bytes: 39270266920
+    phase: P2
+    download_url_verified: false
