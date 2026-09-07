@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 import hashlib
@@ -39,8 +40,16 @@ class AssetDownloader:
         session.headers.update({"User-Agent": "MAT-AssetDownloader/0.1", "Accept-Encoding": "identity"})
         return session
 
+    @staticmethod
+    def _effective_policy(asset: AssetSpec, policy: DirectOnlyPolicy) -> DirectOnlyPolicy:
+        """Merge per-asset provider allowlist without mutating the caller policy."""
+        if asset.allowed_hosts:
+            return replace(policy, allowed_hosts=frozenset(asset.allowed_hosts))
+        return policy
+
     def _request(self, asset: AssetSpec, policy: DirectOnlyPolicy, method: str,
                  *, headers: dict[str, str] | None = None, stream: bool = True):
+        policy = self._effective_policy(asset, policy)
         policy.validate_url(asset.url, asset.asset_id)
         current = asset.url
         chain: list[str] = [_origin(current)]
@@ -65,6 +74,7 @@ class AssetDownloader:
     def probe(self, asset: AssetSpec, policy: DirectOnlyPolicy) -> ProbeReceipt:
         started = datetime.now(timezone.utc).isoformat()
         try:
+            policy = self._effective_policy(asset, policy)
             policy.validate_url(asset.url, asset.asset_id)
             # A probe is intentionally small and does not approve bulk transfer.
             response, chain = self._request(asset, policy, "HEAD", stream=True)
@@ -101,6 +111,7 @@ class AssetDownloader:
         if not max_bytes:
             max_bytes = 50 * 1024**3
         try:
+            policy = self._effective_policy(asset, policy)
             if not asset.download_url_verified:
                 raise MATError(f"{asset.asset_id}: download URL is not verified from provider metadata")
             policy.assert_route_approved((urlparse(asset.url).hostname or "").lower())
