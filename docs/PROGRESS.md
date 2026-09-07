@@ -4,6 +4,20 @@
 
 `RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。M0 审计已执行；M1/M2 的代码和小型契约已实现；真实 P1 数据、姿态/身份权重及跨日姿态真值因直连路由未核验而未下载/未运行。没有训练、没有正式 benchmark、没有人工耗时或测试指标可报告。
 
+## M0—M8 阶段状态
+
+| 阶段 | 状态 | 现场结论 |
+|---|---|---|
+| M0 | `SMOKE_PASSED` | 仓库/机器/代理/路由/上游 commit 审计完成；大文件路由仍未认证 |
+| M1 | `IMPLEMENTED / BLOCKED_DIRECT_ROUTE` | downloader、receipt、校验和、本地 import 已实现；P1 大资产 0 bytes |
+| M2 | `IMPLEMENTED / BLOCKED_MISSING_ASSET` | 适配器、中性 manifest、冻结 split、B0 链和 fixture smoke 完成；没有真实 P1 pilot |
+| M3 | `BLOCKED_MISSING_ASSET` | DLC/ByteTrack 官方运行时与本地 checkpoint 未就绪；未占 GPU |
+| M4 | `IMPLEMENTED / BLOCKED_MISSING_FRONTEND` | H/A/chronological registry 逻辑可运行；无真实群体视频/人工 S0 review |
+| M5 | `IMPLEMENTED / BLOCKED_MISSING_ASSET` | 部位/冲突/memory 逻辑和事务测试完成；无姿态 cache/真实身份结果 |
+| M6 | `NOT_APPLICABLE` | O1 未有真实输入和自监督信号，未启动 O2/外部基线 |
+| M7 | `BLOCKED_NEEDS_POSE_GT` | 评价器/annotation manifest 边界完成；无连续人工姿态真值 |
+| M8 | `PLANNED` | 研究分支已推送小型代码/文档；正式论文级结果尚未具备 |
+
 ## 已完成
 
 - 重核查 `/data2/usr_for_deadline/MAT` 原不存在、GitHub `main` 为空；建立本地 `main` 和 `origin`，不覆盖其他目录。
