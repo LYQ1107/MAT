@@ -1,0 +1,15 @@
+{
+  "schema_version": "mat.assets.lock.v1",
+  "network_audit": {
+    "application_proxy_bypass": true,
+    "route_status": "DIRECT_ROUTE_UNVERIFIED",
+    "bulk_status": "BLOCKED_DIRECT_ROUTE"
+  },
+  "assets": {
+    "rat_id_v1": {"status": "BLOCKED_DIRECT_ROUTE", "sha256": null, "provider_checksum": "bb58d79cee8d87ed0c10b3aa84eff3f0", "downloaded_bytes": 0},
+    "pig_reid_v1": {"status": "BLOCKED_DIRECT_ROUTE", "sha256": null, "provider_checksum": null, "downloaded_bytes": 0},
+    "pig_tracking_5fps": {"status": "BLOCKED_DIRECT_ROUTE", "sha256": null, "provider_checksum": null, "downloaded_bytes": 0},
+    "multicamcows2024_archive": {"status": "BLOCKED_DIRECT_ROUTE", "sha256": null, "provider_checksum": null, "downloaded_bytes": 0}
+  }
+}
+

@@ -1,0 +1,4 @@
+experiment_id: B2
+extends: B0
+training: {backbone_frozen: true, head_lr: 0.0001, max_epochs: 30, early_stop: development}
+

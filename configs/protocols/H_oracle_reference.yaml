@@ -1,0 +1,12 @@
+protocol:
+  enrollment: oracle_reference
+  session_order: chronological
+  prediction_mode: offline_within_session
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: false
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+  note: reference truth is an upper-bound diagnostic, never human time
+

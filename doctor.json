@@ -1,0 +1,15 @@
+{
+  "schema_version": "mat.doctor.v1",
+  "status": "SMOKE_PASSED",
+  "run_at": "2026-09-08",
+  "repo_path": "/data2/usr_for_deadline/MAT",
+  "work_root": "/data2/usr_for_deadline/MAT_workspace",
+  "remote_recheck": {"url": "https://github.com/LYQ1107/MAT.git", "main_state": "empty", "method": "small git ls-remote via existing source-control route"},
+  "application_proxy_bypass": true,
+  "route_status": "DIRECT_ROUTE_UNVERIFIED",
+  "bulk_asset_status": "BLOCKED_DIRECT_ROUTE",
+  "no_secrets_recorded": true,
+  "training_started": false,
+  "notes": ["This checked-in snapshot is a redacted M0 audit; rerun mat doctor to refresh host values.", "No global proxy, route, process, or GPU state was modified."]
+}
+

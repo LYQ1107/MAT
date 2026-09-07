@@ -1,0 +1,12 @@
+name: pig
+skeleton_version: unresolved-pig-dlc-spec
+keypoint_names: [snout, ear_left, ear_right, shoulder, elbow_left, elbow_right, hip, knee_left, knee_right, tail_base]
+edges: [[0,3],[1,3],[2,3],[3,4],[3,5],[3,6],[6,7],[6,8],[6,9]]
+part_groups:
+  head: [0, 1, 2]
+  fore: [3, 4, 5]
+  hind: [6, 7, 8, 9]
+flip_index: null
+supported_views: [top, oblique]
+pose_asset_id: superanimal_pose_detector
+

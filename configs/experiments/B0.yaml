@@ -1,0 +1,22 @@
+project: MAT
+experiment_id: B0
+protocol:
+  enrollment: auto
+  session_order: chronological
+  prediction_mode: offline_within_session
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: false
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+assets:
+  network: direct_only
+  offline_inference: true
+  pose_asset: null
+  identity_asset: null
+models: {local_tracker: bytetrack, identity_encoder: megadescriptor_t_224, descriptor_mode: global, train_backbone: false}
+registry: {immutable_anchors: true, memory_policy: frozen, encoder_version_check: true, permit_unknown: true}
+evaluation: {id_mapping: reference_only_frozen, scope: pilot, seed: 17}
+input_mode: prelocalized_crops
+

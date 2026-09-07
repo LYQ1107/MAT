@@ -1,0 +1,19 @@
+{
+  "schema_version": "mat.models.lock.v1",
+  "megadescriptor_t_224": {
+    "status": "BLOCKED_MISSING_ASSET",
+    "revision": null,
+    "architecture": "swin_tiny_patch4_window7_224",
+    "license": "cc-by-nc-4.0",
+    "sha256": null,
+    "weights_filename": null
+  },
+  "superanimal_pose_detector": {
+    "status": "BLOCKED_MISSING_ASSET",
+    "revision": null,
+    "pose_checkpoint_sha256": null,
+    "detector_checkpoint_sha256": null,
+    "config_sha256": null
+  }
+}
+

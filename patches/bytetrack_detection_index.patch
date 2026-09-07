@@ -1,0 +1,30 @@
+Subject: [MAT] retain source detection indices in ByteTrack associations
+
+Upstream commit: d1bf0191adff59bc8fcfeaa0b33d3d1642552a99
+Upstream file: yolox/tracker/byte_tracker.py
+
+This patch is intentionally kept as an audit artifact. Apply only to the locked
+upstream file after verifying context. It does not change matching thresholds or
+association decisions.
+
+--- a/yolox/tracker/byte_tracker.py
++++ b/yolox/tracker/byte_tracker.py
+@@
+-    def __init__(self, tlwh, score):
++    def __init__(self, tlwh, score, source_detection_index=None):
+@@
+-        self._tlwh = np.asarray(tlwh, dtype=np.float)
++        self._tlwh = np.asarray(tlwh, dtype=np.float64)
++        self.source_detection_index = source_detection_index
+@@
+     def re_activate(self, new_track, frame_id, new_id=False):
++        self.source_detection_index = new_track.source_detection_index
+@@
+     def update(self, new_track, frame_id):
++        self.source_detection_index = new_track.source_detection_index
+
+At each high/low score filter, carry `np.arange(N)` alongside detections and pass
+the original index into STrack. The MAT wrapper returns `None` for source index on
+pure Kalman predictions. This file does not claim to be an applied patch until an
+integration run against the exact commit succeeds.
+

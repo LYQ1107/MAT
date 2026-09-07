@@ -1,0 +1,28 @@
+schema_version: mat.upstream_lock.v1
+locked_at: 2026-09-08
+sources:
+  deeplabcut:
+    url: https://github.com/DeepLabCut/DeepLabCut.git
+    commit: 53e95879b9a090ccd095c3f9c724e1ade4be8fb4
+    files:
+      - deeplabcut/modelzoo/video_inference.py
+      - deeplabcut/pose_estimation_pytorch/apis/videos.py
+  bytetrack:
+    url: https://github.com/FoundationVision/ByteTrack.git
+    commit: d1bf0191adff59bc8fcfeaa0b33d3d1642552a99
+    file: yolox/tracker/byte_tracker.py
+  wildlife_tools:
+    url: https://github.com/WildlifeDatasets/wildlife-tools.git
+    commit: 2f22214c8c331ca4174ce231c23de0add7718ee2
+    files:
+      - wildlife_tools/features/deep.py
+  idtrackerai:
+    url: https://gitlab.com/polavieja_lab/idtrackerai.git
+    commit: 14ff552d209d743e514e8acdeb1590777b9fef98
+  trackeval:
+    url: https://github.com/JonathonLuiten/TrackEval.git
+    commit: 12c8791b303e0a0b50f753af204249e622d0281a
+  cow_identifier:
+    url: https://github.com/Phoenix4582/CowIDentifier.git
+    commit: 5126e7f5af085779160e8d5cc986cc0cf07a4719
+

@@ -10,16 +10,18 @@ env/
 .coverage
 MAT_workspace/
 /data2/usr_for_deadline/MAT_workspace/
-assets/
-models/
-cache/
-runs/
-registries/
-annotations/
-external_src/
-wheelhouse/
-logs/
-tmp/
+# The source package has directories named assets/models; only ignore root-level
+# runtime directories, never src/mat/assets or src/mat/models.
+/assets/
+/models/
+/cache/
+/runs/
+/registries/
+/annotations/
+/external_src/
+/wheelhouse/
+/logs/
+/tmp/
 *.part
 *.zip
 *.tar
@@ -53,4 +55,3 @@ tmp/
 *.key
 *.pem
 *.env
-

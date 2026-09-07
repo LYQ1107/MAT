@@ -1,0 +1,13 @@
+name: quadruped
+skeleton_version: unresolved-dlc-species-config
+keypoint_names: [nose, neck, shoulder, elbow, wrist, hip, knee, ankle, tail_base]
+edges: [[0,1],[1,2],[2,3],[3,4],[1,5],[5,6],[6,7],[5,8]]
+part_groups:
+  head: [0, 1]
+  fore: [2, 3, 4]
+  hind: [5, 6, 7]
+  trunk: [1, 5, 8]
+flip_index: null
+supported_views: [side, top, oblique]
+pose_asset_id: superanimal_pose_detector
+

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mat-longitudinal"
+version = "0.1.0"
+description = "Auditable cross-recording animal identity and 2-D pose pipeline"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.23", "PyYAML>=6.0", "requests>=2.28"]
+
+[project.scripts]
+mat = "mat.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+

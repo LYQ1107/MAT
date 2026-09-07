@@ -1,0 +1,12 @@
+name: cow
+skeleton_version: unresolved-cow-dlc-spec
+keypoint_names: [nose, ear_left, ear_right, neck, shoulder, elbow_left, elbow_right, hip, knee_left, knee_right, tail_base]
+edges: [[0,3],[1,3],[2,3],[3,4],[4,5],[4,6],[4,7],[7,8],[7,9],[7,10]]
+part_groups:
+  head: [0, 1, 2, 3]
+  fore: [4, 5, 6]
+  hind: [7, 8, 9, 10]
+flip_index: null
+supported_views: [side, top, oblique]
+pose_asset_id: superanimal_pose_detector
+

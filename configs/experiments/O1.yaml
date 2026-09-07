@@ -1,0 +1,6 @@
+experiment_id: O1
+extends: B0
+models: {descriptor_mode: global_and_parts}
+registry: {memory_policy: quarantine_commit, immutable_anchors: true, encoder_version_check: true, permit_unknown: true}
+matching: {solver: deterministic_greedy, allow_nonoverlap_reuse: true, same_camera_overlap_cannot_link: true}
+

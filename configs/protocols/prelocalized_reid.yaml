@@ -1,0 +1,13 @@
+protocol:
+  enrollment: oracle_reference
+  session_order: chronological
+  prediction_mode: crop_only
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: true
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+input_mode: prelocalized_crops
+warning: Rat/PigReID crop diagnostics are not A end-to-end enrollment
+

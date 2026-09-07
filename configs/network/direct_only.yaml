@@ -1,0 +1,9 @@
+schema_version: mat.network.v1
+mode: direct_only
+route_status_required: VERIFIED_DIRECT
+max_metadata_bytes: 67108864
+max_probe_bytes: 65536
+max_parallel_downloads: 2
+max_retries_per_source: 3
+offline_inference: true
+

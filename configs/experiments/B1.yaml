@@ -1,0 +1,4 @@
+experiment_id: B1
+extends: B0
+registry: {memory_policy: naive}
+

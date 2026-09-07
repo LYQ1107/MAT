@@ -1,0 +1,17 @@
+{
+  "schema_version": "mat.asset_plan.v1",
+  "generated": "2026-09-08",
+  "phase": "P1",
+  "route_status": "DIRECT_ROUTE_UNVERIFIED",
+  "bulk_status": "BLOCKED_DIRECT_ROUTE",
+  "metadata_budget_bytes": 67108864,
+  "probe_budget_bytes_per_asset": 65536,
+  "parallel_downloads": 2,
+  "assets": [
+    {"asset_id": "rat_id_v1", "role": "prelocalized_reid", "source": "https://zenodo.org/records/15112879", "download_url": null, "expected_bytes": null, "provider_checksum": "bb58d79cee8d87ed0c10b3aa84eff3f0", "status": "BLOCKED_DIRECT_ROUTE"},
+    {"asset_id": "pig_reid_v1", "role": "prelocalized_reid", "source": "https://zenodo.org/records/18224572", "download_url": null, "expected_bytes": null, "provider_checksum": null, "status": "BLOCKED_DIRECT_ROUTE"}
+  ],
+  "selection_rule": "Resolve provider file list first; no guessed file URL or whole archive fallback before route approval.",
+  "local_import": "mat assets import --asset ASSET_ID --source /authorized/file"
+}
+

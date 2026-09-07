@@ -1,0 +1,4 @@
+experiment_id: B3
+extends: B0
+models: {descriptor_mode: global_and_parts}
+
