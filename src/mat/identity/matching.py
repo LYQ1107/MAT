@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 
 from mat.core.types import Assignment, IdentityDescriptor, LocalTracklet, ScoreMatrix
+from mat.core.errors import ProtocolError
 from mat.identity.conflicts import ConflictGraph, ConflictGraphBuilder
 
 __all__ = ["ConflictGraph", "ConflictGraphBuilder", "MatchingPolicy", "PersistentMatcher", "StaticGalleryMatcher"]
@@ -34,6 +35,11 @@ class PersistentMatcher:
             query = descriptors[track.tracklet_uid]
             for j, uid in enumerate(identity_uids):
                 ref = gallery.descriptors[uid]
+                if query.encoder_fingerprint != ref.encoder_fingerprint:
+                    raise ProtocolError(
+                        f"feature-space mismatch for {track.tracklet_uid}/{uid}: "
+                        f"{query.encoder_fingerprint} != {ref.encoder_fingerprint}"
+                    )
                 global_score = _cosine(query.global_feature, ref.global_feature)
                 common = query.part_valid & ref.part_valid
                 if np.any(common):
@@ -89,4 +95,4 @@ class PersistentMatcher:
 
 
 class StaticGalleryMatcher(PersistentMatcher):
-    pass
+    """B0 alias: a matcher that never mutates the gallery."""

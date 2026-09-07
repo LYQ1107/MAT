@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Any
 import re
+import hashlib
 
 from mat.core.types import FramePacket, SessionSpec
 from mat.core.errors import ValidationError
@@ -29,8 +30,11 @@ def inspect_files(name: str, raw_root: Path, capabilities: dict[str, bool | None
 
 def _session_from(path: Path, dataset_name: str, ordinal: int) -> tuple[str, str, str, float]:
     parts = path.parts
-    # Session/camera are intentionally neutralized and never inferred as IDs.
-    session = f"{dataset_name}:session:{parts[-2] if len(parts) > 1 else '0'}"
+    # Session/camera are opaque hashes: a provider folder can contain an EID and must
+    # never be exposed verbatim to the model process.
+    parent = parts[-2] if len(parts) > 1 else "0"
+    token = hashlib.sha256(f"{dataset_name}:session:{parent}".encode()).hexdigest()[:16]
+    session = f"{dataset_name}:session:{token}"
     camera = "camera:unknown"
     return session, camera, float(ordinal)
 
@@ -49,7 +53,7 @@ def build_common_manifests(dataset_name: str, raw_root: Path, output_root: Path,
         row = {
             "schema_version": "mat.observation.v1", "observation_uid": uid,
             "frame_uid": f"{session_uid}:{ordinal}", "session_uid": session_uid,
-            "cohort_uid": f"{dataset_name}:cohort:unresolved", "camera_uid": camera_uid,
+            "dataset_uid": inv.dataset_uid, "cohort_uid": f"{dataset_name}:cohort:unresolved", "camera_uid": camera_uid,
             "frame_index": ordinal, "timestamp_s": timestamp, "image_ref": object_ref,
             "input_mode": "prelocalized_crops",
         }
@@ -84,4 +88,3 @@ def records_to_frames(session: SessionSpec, records: list[dict[str, Any]], image
             raise ValidationError("neutral manifest requires an explicit image_loader for pixel access")
         yield FramePacket(row.get("dataset_uid", "unknown"), session.cohort_uid, session.session_uid,
                           session.camera_uid, int(row["frame_index"]), float(row["timestamp_s"]), rgb)
-

@@ -12,6 +12,7 @@
 - 锁定已核查上游 commit；记录 DLC/ByteTrack/WildlifeTools 实际签名，未编造不在源码中的接口。
 - 实现 DirectOnlyPolicy、限额 probe/fetch、重定向白名单、Range 续传保护、checksum/SHA-256、zip-slip 检查、原子 receipt 和授权本地 import。
 - 实现中性数据契约、Rat/PigReID/PigTracking/MultiCamCows 适配器、冻结 split、ByteTrack 检测索引边界、冻结身份特征接口、部位/冲突匹配、anchor/quarantine/commit registry、固定 S0 mapping 评价和标注包边界。
+- 研究分支 `research/longitudinal-mat` 当前本地/远端 SHA：`088367923698bfcd6090d9ee8d6651000856d65c`（`git ls-remote origin refs/heads/research/longitudinal-mat` 已核对）；main 保留安全基线 `78e7ae4`。
 
 ## 未运行/真实结果
 
@@ -25,6 +26,8 @@
 | O1/O2/外部基线 | `NOT_APPLICABLE`/blocked | 需要真实视频/session 和权重 |
 | 联合纵向姿态 | `BLOCKED_NEEDS_POSE_GT` | 没有人工连续姿态真值 |
 
+小型官方网页/源码文本核验已通过控制通道和受限 source-control 请求完成；Zenodo API 直连请求超时，未保存或猜测文件直链，故 provider 字节数/license 仍以待现场 API 为准。
+
 ## 下一条可执行命令
 
 ```bash
@@ -35,4 +38,3 @@ PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli assets plan --catal
 PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli assets import --asset rat_id_v1 --source /authorized/Dataset_128_16x9x10K_Color.zip
 PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli data inspect --dataset rat_id --work-root "$MAT_WORK_ROOT"
 ```
-

@@ -120,7 +120,7 @@ def data_inspect(args) -> int:
         result = {"dataset": args.dataset, "status": "BLOCKED_MISSING_ASSET", "raw_root": str(raw), "reason": "authorized raw directory is absent"}
     else:
         result = asdict(adapter.inspect(raw)); result["status"] = "SMOKE_PASSED"
-    out = work / "assets" / "manifests" / args.dataset / "inventory.json"; _write_json(out, result); print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
+    out = work / "assets" / "manifests" / args.dataset / "inventory.json"; _write_json(out, result); print(json.dumps(result, ensure_ascii=False, indent=2)); return 0 if result.get("status") == "SMOKE_PASSED" else 2
 
 
 def data_prepare(args) -> int:
@@ -176,7 +176,10 @@ def build_parser() -> argparse.ArgumentParser:
     for name, command in [("reference", "export"), ("enroll", None), ("run", "cohort"), ("evaluate", None)]:
         parent = sub.add_parser(name)
         if command: parent = parent.add_subparsers(dest=f"{name}_cmd", required=True).add_parser(command)
-        parent.add_argument("--config", required=False); parent.add_argument("--work-root"); parent.set_defaults(func=lambda a, s=name: blocked_stage(type("Args", (), {"stage":s, "work_root":a.work_root})()))
+        parent.add_argument("--config", required=False); parent.add_argument("--work-root")
+        if name == "enroll": parent.add_argument("--mode", choices=["auto", "human", "oracle_reference"], required=True)
+        if name == "evaluate": parent.add_argument("--run"); parent.add_argument("--truth")
+        parent.set_defaults(func=lambda a, s=name: blocked_stage(type("Args", (), {"stage":s, "work_root":a.work_root})()))
     return parser
 
 

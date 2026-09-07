@@ -14,6 +14,8 @@ class PoseEvaluator:
         if pred.shape != truth.shape or pred.shape[:-1] != visible.shape:
             raise ValueError("pose prediction/truth/visibility shape mismatch")
         scale = np.asarray(scale, dtype=float)
+        if scale.ndim == 1 and pred.ndim >= 2 and scale.shape[0] == pred.shape[0]:
+            scale = scale[:, None]
         error = np.linalg.norm(pred - truth, axis=-1) / np.maximum(scale, 1e-9)
         valid = visible & np.isfinite(error)
         values = error[valid]
@@ -29,10 +31,12 @@ class IdentityAwarePoseEvaluator:
                  threshold: float = 0.05) -> MetricBundle:
         pred, truth = np.asarray(predicted_xy), np.asarray(truth_xy)
         base = np.asarray(visible, bool) & np.asarray(located, bool)[..., None] & np.asarray(identity_correct, bool)[..., None]
-        error = np.linalg.norm(pred - truth, axis=-1) / np.maximum(np.asarray(scale, float), 1e-9)
+        scale = np.asarray(scale, float)
+        if scale.ndim == 1 and pred.ndim >= 2 and scale.shape[0] == pred.shape[0]:
+            scale = scale[:, None]
+        error = np.linalg.norm(pred - truth, axis=-1) / np.maximum(scale, 1e-9)
         valid = base & np.isfinite(error)
         return MetricBundle("SUCCEEDED" if valid.any() else "BLOCKED_NEEDS_POSE_GT",
                             {"identity_aware_pck": float(np.mean(error[valid] <= threshold)) if valid.any() else None,
                              "identity_aware_mean_error": float(error[valid].mean()) if valid.any() else None},
                             {"joint_valid_points": int(valid.sum()), "candidate_visible_points": int(np.asarray(visible, bool).sum())}, [])
-
