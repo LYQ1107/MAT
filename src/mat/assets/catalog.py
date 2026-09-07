@@ -97,7 +97,7 @@ class AssetCatalog:
         except ImportError as exc:  # pragma: no cover
             raise ValidationError("PyYAML is required to read an asset catalog") from exc
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        entries = raw.get("assets", raw if isinstance(raw, list) else [])
+        entries = raw.get("assets", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
         assets: list[AssetSpec] = []
         for item in entries:
             item = dict(item)

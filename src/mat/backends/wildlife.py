@@ -48,6 +48,41 @@ class GlobalIdentityBackend:
         return DescriptorBatch(output, parts, np.zeros((len(output), 0), bool),
                                np.zeros((len(output), 0), np.float32), self.fingerprint)
 
+    @classmethod
+    def from_local(cls, checkpoint: Path, *, architecture: str = "swin_tiny_patch4_window7_224",
+                   config_path: Path | None = None, expected_sha256: str | None = None,
+                   device: str = "cpu") -> "GlobalIdentityBackend":
+        """Construct a model without ``hf-hub``/``pretrained=True`` network access."""
+        if not checkpoint.is_file():
+            raise MissingAssetError(f"missing identity checkpoint: {checkpoint}")
+        digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        if expected_sha256 and digest != expected_sha256:
+            raise MissingAssetError("identity checkpoint SHA-256 mismatch")
+        try:
+            import torch
+            import timm
+        except ImportError as exc:  # pragma: no cover
+            raise DependencyUnavailableError("offline identity loading requires torch and timm") from exc
+        model = timm.create_model(architecture, pretrained=False, num_classes=0)
+        raw = torch.load(str(checkpoint), map_location="cpu")
+        state = raw.get("state_dict", raw.get("model", raw)) if isinstance(raw, dict) else raw
+        if not isinstance(state, dict):
+            raise ValidationError("unsupported checkpoint structure")
+        cleaned = {}
+        for key, value in state.items():
+            key = key.removeprefix("module.")
+            if any(key.startswith(prefix) for prefix in ("head.", "fc.", "classifier.")):
+                continue
+            cleaned[key] = value
+        missing, unexpected = model.load_state_dict(cleaned, strict=False)
+        non_head_missing = [k for k in missing if not any(k.startswith(p) for p in ("head.", "fc.", "classifier."))]
+        non_head_unexpected = [k for k in unexpected if not any(k.startswith(p) for p in ("head.", "fc.", "classifier."))]
+        if non_head_missing or non_head_unexpected:
+            raise MissingAssetError(f"checkpoint backbone mismatch: missing={non_head_missing}, unexpected={non_head_unexpected}")
+        model.to(device).eval()
+        preprocess_fingerprint = hashlib.sha256(config_path.read_bytes()).hexdigest() if config_path else "config-unresolved"
+        return cls(model, model_hash=digest, preprocess_fingerprint=preprocess_fingerprint, device=device)
+
 
 class NumpyFixtureEncoder:
     """Small deterministic encoder used only by TEST_FIXTURE/unit tests."""
@@ -67,4 +102,3 @@ class NumpyFixtureEncoder:
                                np.linalg.norm(hist, axis=1, keepdims=True), 1.0)
         return DescriptorBatch(hist.astype(np.float32), np.zeros((len(hist), 0, hist.shape[1]), np.float32),
                                np.zeros((len(hist), 0), bool), np.zeros((len(hist), 0), np.float32), self.fingerprint)
-

@@ -31,6 +31,10 @@ class ManualRegistrar:
                 verification.get("actual_human_seconds"), verification.get("provenance", "human"))
         if verification.provenance not in {"human", "oracle_reference"}:
             raise ProtocolError("verification provenance must be human or oracle_reference")
+        if verification.operation_count < 0 or (verification.actual_human_seconds is not None and verification.actual_human_seconds < 0):
+            raise ValidationError("verification operation count/time must be non-negative")
+        if verification.provenance == "oracle_reference" and verification.actual_human_seconds is not None:
+            raise ProtocolError("oracle_reference cannot claim human time")
         allowed = {t.tracklet_uid for t in tracklets}
         identities: list[PersistentIdentity] = []
         out_desc = {}
@@ -53,4 +57,3 @@ class ManualRegistrar:
         provenance = "H_human" if verification.provenance == "human" else "H_oracle_reference"
         return EnrollmentResult(cohort_uid, session_uid, tuple(identities), out_desc, unresolved,
                                 coverage, provenance, "SUCCEEDED")
-

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from mat.core.types import IdentityDescriptor, PersistentIdentity, LocalTracklet
+
+EnrollmentProtocol = Literal["human", "oracle_reference", "auto"]
 
 
 @dataclass(frozen=True)
@@ -36,4 +38,3 @@ class EvidenceBundle:
     independent_windows: int
     source_observation_uids: tuple[str, ...] = ()
     provenance: dict[str, Any] = field(default_factory=dict)
-

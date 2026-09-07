@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 import numpy as np
 
 from mat.core.errors import MissingAssetError
@@ -26,3 +26,16 @@ class PoseBackendBase:
         if missing:
             raise MissingAssetError("missing verified local pose assets: " + ", ".join(missing))
 
+
+class PoseBackend(Protocol):
+    def verify_assets(self) -> None: ...
+    def predict_session(self, session, species, boxes=None) -> PoseCache: ...
+
+
+class LocalTrackerBackend(Protocol):
+    def reset(self, session_uid: str) -> None: ...
+    def update(self, frame, observations): ...
+
+
+class IdentityEncoder(Protocol):
+    def encode(self, samples) -> Any: ...

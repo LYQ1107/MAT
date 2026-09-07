@@ -1,6 +1,5 @@
-from .base import EnrollmentResult, EvidenceBundle, ReferenceVerification
+from .base import EnrollmentResult, EvidenceBundle, ReferenceVerification, EnrollmentProtocol
 from .automatic import AutoRegistrar
 from .manual import ManualRegistrar
 
-__all__ = ["EnrollmentResult", "EvidenceBundle", "ReferenceVerification", "AutoRegistrar", "ManualRegistrar"]
-
+__all__ = ["EnrollmentResult", "EvidenceBundle", "ReferenceVerification", "EnrollmentProtocol", "AutoRegistrar", "ManualRegistrar"]

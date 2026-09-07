@@ -106,7 +106,19 @@ class AssetDownloader:
             policy.assert_route_approved((urlparse(asset.url).hostname or "").lower())
             policy.validate_url(asset.url, asset.asset_id)
             if target.exists():
+                recorded = None
+                if receipt_path.exists():
+                    try:
+                        previous = json.loads(receipt_path.read_text(encoding="utf-8"))
+                        if previous.get("status") == "VERIFIED":
+                            recorded = previous.get("sha256")
+                    except (OSError, ValueError):
+                        recorded = None
                 digest = verify_file(target, asset.expected_bytes, asset.provider_checksum, asset.checksum_algorithm)
+                if not asset.provider_checksum and not recorded:
+                    raise IntegrityError("existing file lacks a prior verified receipt")
+                if recorded and recorded != digest:
+                    raise IntegrityError("existing file differs from its verified receipt")
                 receipt = ArtifactReceipt(asset.asset_id, "VERIFIED", str(target), target.stat().st_size, 0,
                                           asset.provider_checksum, digest, asset.expected_bytes, _origin(asset.url),
                                           asset.source_revision, asset.license, policy.route_status, started,

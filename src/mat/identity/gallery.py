@@ -158,6 +158,7 @@ class GalleryStore:
             data = {"cohort_uid": cohort, "assignment": assignment.__dict__,
                     "descriptor": {"global_feature": evidence.descriptor.global_feature.tolist(),
                                    "part_features": evidence.descriptor.part_features.tolist(),
+                                   "part_shape": list(evidence.descriptor.part_features.shape),
                                    "part_valid": evidence.descriptor.part_valid.tolist(),
                                    "part_quality": evidence.descriptor.part_quality.tolist(),
                                    "encoder_fingerprint": evidence.descriptor.encoder_fingerprint},
