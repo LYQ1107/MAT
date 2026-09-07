@@ -1,0 +1,5 @@
+experiment_id: pose_annotation_pilot
+sampling: {continuous_seconds: [5, 10], random_and_hard: true}
+status: PLANNED
+ground_truth: human_or_assisted_only
+

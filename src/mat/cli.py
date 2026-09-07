@@ -150,9 +150,31 @@ def train_source(args) -> int:
 
 
 def config_validate(args) -> int:
-    import yaml
-    raw = yaml.safe_load(Path(args.config).read_text(encoding="utf-8")) or {}
+    raw = _load_config(Path(args.config))
     validate_protocol(raw.get("protocol", {})); print("SMOKE_PASSED"); return 0
+
+
+def _load_config(path: Path) -> dict[str, Any]:
+    import yaml
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"config must be a mapping: {path}")
+    parent_ref = raw.pop("extends", None)
+    if not parent_ref:
+        return raw
+    parent_path = (path.parent / parent_ref).with_suffix(path.suffix) if not str(parent_ref).endswith(('.yaml', '.yml')) else path.parent / parent_ref
+    parent = _load_config(parent_path)
+    return _deep_merge(parent, raw)
+
+
+def _deep_merge(parent: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(parent)
+    for key, value in child.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def build_parser() -> argparse.ArgumentParser:
