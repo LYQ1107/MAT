@@ -44,7 +44,11 @@ class AssetDownloader:
     def _effective_policy(asset: AssetSpec, policy: DirectOnlyPolicy) -> DirectOnlyPolicy:
         """Merge per-asset provider allowlist without mutating the caller policy."""
         if asset.allowed_hosts:
-            return replace(policy, allowed_hosts=frozenset(asset.allowed_hosts))
+            asset_hosts = frozenset(asset.allowed_hosts)
+            allowed = asset_hosts if not policy.allowed_hosts else policy.allowed_hosts & asset_hosts
+            if not allowed:
+                raise IntegrityError("asset host allowlist does not intersect policy allowlist")
+            return replace(policy, allowed_hosts=allowed)
         return policy
 
     def _request(self, asset: AssetSpec, policy: DirectOnlyPolicy, method: str,
