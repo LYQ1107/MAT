@@ -751,6 +751,14 @@ def baseline_sleap_gerbils(args) -> int:
         manifest.update(smoke_stats)
     elif stage in {"train-full", "all-full"}:
         manifest.update(_training_stats(work, scope="full"))
+    elif stage in {"test-full", "clip-full"}:
+        # A later evaluation invocation writes a fresh manifest in the same
+        # run directory; retain the already measured formal training receipt
+        # instead of dropping epoch/step provenance.
+        manifest.update(_training_stats(work, scope="full"))
+        plan = full_root / "planned_command.json"
+        if plan.is_file():
+            manifest["full_training_plan"] = str(plan)
     if manifest.get("status") == "RUNNING":
         manifest["status"] = "SUCCEEDED" if not manifest["blockers"] else "BLOCKED"
     manifest["blockers"] = sorted(set(manifest["blockers"]))
