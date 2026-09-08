@@ -67,8 +67,9 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 ```bash
 export MAT_WORK_ROOT=/data2/usr_for_deadline/MAT_workspace
-PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli data inspect \
-  --dataset sleap_gerbils --work-root "$MAT_WORK_ROOT"
-# 取得授权的 MegaDescriptor-T-224 config/checkpoint 后：校验 SHA、architecture、missing/unexpected keys，
-# 再运行 S0 enrollment → B0 global static gallery → query assignment；没有原件时保持 BLOCKED。
+export MEGA_CHECKPOINT=/data2/usr_for_deadline/MAT_workspace/assets/identity/megadescriptor_t_224.ckpt
+# 取得并核验与 checkpoint 同目录的 config.json 后，再执行；当前文件不存在，故保持 BLOCKED。
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli experiment b0 \
+  --config configs/experiments/gerbils/B0_global_static.yaml \
+  --identity-checkpoint "$MEGA_CHECKPOINT" --work-root "$MAT_WORK_ROOT"
 ```

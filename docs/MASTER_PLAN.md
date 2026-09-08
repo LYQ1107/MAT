@@ -53,10 +53,9 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ```bash
 export MAT_WORK_ROOT=/data2/usr_for_deadline/MAT_workspace
-PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli data inspect --dataset sleap_gerbils --work-root "$MAT_WORK_ROOT"
-# 有授权的 MegaDescriptor-T-224 config + checkpoint 原件后，先用 GlobalIdentityBackend.from_local 校验架构/SHA/keys，
-# 再从 SLEAP 中性 observations 生成 S0/query crops，运行真实 B0_global_static_gallery。
-PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli split freeze \
-  --manifest "$MAT_WORK_ROOT/prepared/sleap_gerbils/manifests/sessions.jsonl" \
-  --field session_uid --seed 17
+export MEGA_CHECKPOINT=/data2/usr_for_deadline/MAT_workspace/assets/identity/megadescriptor_t_224.ckpt
+# 取得并核验与 checkpoint 同目录的 config.json 后，再运行 S0 → B0；没有原件时 CLI 保持 BLOCKED。
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli experiment b0 \
+  --config configs/experiments/gerbils/B0_global_static.yaml \
+  --identity-checkpoint "$MEGA_CHECKPOINT" --work-root "$MAT_WORK_ROOT"
 ```
