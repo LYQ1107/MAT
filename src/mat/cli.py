@@ -710,15 +710,21 @@ def baseline_sleap_gerbils(args) -> int:
         else:
             manifest["full_checkpoint"] = str(checkpoint)
             manifest["pose_checkpoint"] = str(checkpoint)
-            manifest["pose_checkpoint_sha256"] = _sha256_file(checkpoint)
-            manifest["pose_checkpoint_hash"] = manifest["pose_checkpoint_sha256"]
+            checkpoint_sha = _sha256_file(checkpoint)
+            manifest["pose_checkpoint_sha256"] = checkpoint_sha
+            manifest["pose_checkpoint_hash"] = checkpoint_sha
+            # Every formal prediction artifact is checkpoint-addressed and
+            # lives below the full tree.  This prevents an older smoke
+            # ``run_dir/test_predictions.slp`` (or a different full model)
+            # from being silently reused because a path already exists.
+            checkpoint_tag = checkpoint_sha[:16]
             if stage in {"test-full", "all-full"}:
                 validation_dir = full_root / "validation"
                 validation_dir.mkdir(parents=True, exist_ok=True)
                 threshold_results = []
                 selected_threshold = None
                 for threshold in (0.10, 0.15, 0.20, 0.25):
-                    val_prediction = validation_dir / f"predictions_t{threshold:.2f}.slp"
+                    val_prediction = validation_dir / f"predictions_{checkpoint_tag}_t{threshold:.2f}.slp"
                     if not val_prediction.is_file():
                         backend.predict(required["val"], checkpoint, val_prediction, only_labeled_frames=True,
                                         peak_threshold=threshold)
@@ -731,17 +737,22 @@ def baseline_sleap_gerbils(args) -> int:
                 if selected_threshold is None:
                     manifest["blockers"].append("formal_validation_has_no_predicted_instances")
                 else:
-                    prediction = run_dir / "test_predictions.slp"
+                    test_dir = full_root / "test"
+                    test_dir.mkdir(parents=True, exist_ok=True)
+                    prediction = test_dir / f"test_predictions_{checkpoint_tag}.slp"
                     if not prediction.is_file():
                         backend.predict(required["test"], checkpoint, prediction, only_labeled_frames=True,
                                         peak_threshold=selected_threshold)
                     manifest["test_prediction"] = str(prediction)
                     manifest["test_prediction_count"] = _count_slp_instances(prediction, backend, env)
-                    manifest["test_eval"] = backend.evaluate(required["test"], prediction, run_dir / "eval")
+                    manifest["test_eval"] = backend.evaluate(required["test"], prediction,
+                                                              test_dir / f"eval_{checkpoint_tag}")
                     if manifest["test_prediction_count"].get("instances", 0) == 0:
                         manifest["blockers"].append("formal_test_has_no_predicted_instances")
             if stage in {"clip-full", "all-full"}:
-                clip_prediction = run_dir / "example_5min.predictions.slp"
+                clip_dir = full_root / "clip"
+                clip_dir.mkdir(parents=True, exist_ok=True)
+                clip_prediction = clip_dir / f"example_5min_predictions_{checkpoint_tag}.slp"
                 if not clip_prediction.is_file():
                     backend.predict(required["clip"], checkpoint, clip_prediction, tracking=True, frames=clip_frames)
                 manifest["clip_prediction"] = str(clip_prediction)
