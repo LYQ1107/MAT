@@ -43,3 +43,11 @@ def test_b0_runner_rejects_gt_in_model_rows(tmp_path):
                                  NumpyFixtureEncoder(), store, "s0", ["s1"])
     assert result.status == "FAILED_LEAKAGE_CONTRACT"
     store.close()
+
+
+def test_b0_runner_rejects_private_pose_truth_in_model_rows(tmp_path):
+    store = GalleryStore(tmp_path / "registry.sqlite")
+    result = run_prelocalized_b0([{"observation_uid": "o", "session_uid": "s0", "image": np.zeros((4, 4, 3), np.uint8), "gt_keypoints": []}],
+                                 NumpyFixtureEncoder(), store, "s0", ["s1"])
+    assert result.status == "FAILED_LEAKAGE_CONTRACT"
+    store.close()

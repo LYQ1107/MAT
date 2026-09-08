@@ -8,7 +8,10 @@ import json
 from .manifests import iter_manifest_records
 
 
-FORBIDDEN_MODEL_FIELDS = {"gt_id", "eid", "identity", "treatment", "behavior", "disease"}
+FORBIDDEN_MODEL_FIELDS = {
+    "gt_id", "eid", "identity", "gt_identity", "gt_keypoints", "gt_visibility",
+    "treatment", "behavior", "disease",
+}
 
 
 def validate_neutral_manifest(path: Path) -> dict[str, Any]:
@@ -35,4 +38,3 @@ def leakage_check(observations: Path, truth: Path) -> dict[str, Any]:
     truth_ids = {row.get("observation_uid") for row in iter_manifest_records(truth)}
     obs_ids = {row.get("observation_uid") for row in iter_manifest_records(observations)}
     return {**neutral, "truth_rows": len(truth_ids), "observation_truth_overlap": len(obs_ids & truth_ids)}
-

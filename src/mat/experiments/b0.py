@@ -13,6 +13,7 @@ from mat.identity.gallery import GalleryStore
 from mat.enrollment.automatic import AutoRegistrar
 from mat.identity.conflicts import ConflictGraphBuilder
 from mat.identity.matching import PersistentMatcher, MatchingPolicy
+from mat.data.sanitize import FORBIDDEN_MODEL_FIELDS
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ def run_prelocalized_b0(observation_rows: list[dict[str, Any]], encoder, gallery
     This path deliberately rejects identity labels in model rows and always marks the
     result ``prelocalized_crops``; it cannot be used to claim A end-to-end enrollment.
     """
-    if any("gt_id" in row or "eid" in row for row in observation_rows):
+    if any(FORBIDDEN_MODEL_FIELDS.intersection(row) for row in observation_rows):
         return B0Result("FAILED_LEAKAGE_CONTRACT", "prelocalized_crops", "A_auto", reference_session_uid, tuple(query_session_uids), (), None, "ground truth field in model rows")
     ref_rows = [r for r in observation_rows if r.get("session_uid") == reference_session_uid]
     if not ref_rows:
@@ -92,4 +93,3 @@ def run_prelocalized_b0(observation_rows: list[dict[str, Any]], encoder, gallery
         assignments.extend(a.__dict__ for a in assigned)
     return B0Result("SUCCEEDED", "prelocalized_crops", "A_auto", reference_session_uid, tuple(query_session_uids),
                     tuple(assignments), snapshot.version)
-

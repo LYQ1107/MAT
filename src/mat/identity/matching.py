@@ -28,6 +28,13 @@ class MatchingPolicy:
 
 
 class PersistentMatcher:
+    """B0 static-gallery matcher using the global descriptor only.
+
+    Part evidence belongs to the explicitly named B1/V1 matcher.  Keeping it
+    out of this class makes the ablation boundary auditable and prevents an
+    accidental part-aware score from being reported as ``B0_global_static``.
+    """
+
     def score(self, tracklets: list[LocalTracklet], descriptors: dict[str, IdentityDescriptor], gallery) -> ScoreMatrix:
         identity_uids = tuple(sorted(gallery.descriptors))
         values = np.full((len(tracklets), len(identity_uids)), -np.inf, dtype=np.float32)
@@ -40,16 +47,7 @@ class PersistentMatcher:
                         f"feature-space mismatch for {track.tracklet_uid}/{uid}: "
                         f"{query.encoder_fingerprint} != {ref.encoder_fingerprint}"
                     )
-                global_score = _cosine(query.global_feature, ref.global_feature)
-                common = query.part_valid & ref.part_valid
-                if np.any(common):
-                    part_scores = np.array([_cosine(query.part_features[k], ref.part_features[k]) for k in range(len(common))])
-                    weights = query.part_quality * ref.part_quality
-                    part = float(np.average(part_scores[common], weights=np.maximum(weights[common], 1e-6)))
-                    score = 0.5 * global_score + 0.5 * part
-                else:
-                    score = global_score
-                values[i, j] = score
+                values[i, j] = _cosine(query.global_feature, ref.global_feature)
         return ScoreMatrix(tuple(t.tracklet_uid for t in tracklets), identity_uids, values)
 
     def assign(self, scores: ScoreMatrix, conflicts: ConflictGraph,
