@@ -311,7 +311,10 @@ class GlobalIdentityBackend:
         non_head_unexpected = [k for k in unexpected if not any(k.startswith(p) for p in ("head.", "fc.", "classifier."))]
         if non_head_missing or non_head_unexpected:
             raise MissingAssetError(f"checkpoint backbone mismatch: missing={non_head_missing}, unexpected={non_head_unexpected}")
-        model.to(device).eval()
+        resolved_device = device
+        if device == "auto":
+            resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(resolved_device).eval()
         preprocess_spec = IdentityPreprocessSpec.official_t224(config)
         preprocess_fingerprint = preprocess_spec.fingerprint
         runtime = MegaDescriptorRuntime(model, preprocess_spec=preprocess_spec)
@@ -329,7 +332,7 @@ class GlobalIdentityBackend:
             except (OSError, ValueError, TypeError):
                 pass
         preprocess_spec.write(audit_path, equivalence=equivalence)
-        return cls(runtime=runtime, model_hash=digest, preprocess_fingerprint=preprocess_fingerprint, device=device)
+        return cls(runtime=runtime, model_hash=digest, preprocess_fingerprint=preprocess_fingerprint, device=resolved_device)
 
 
 class NumpyFixtureEncoder:

@@ -436,6 +436,11 @@ class SleapGerbilsAdapter:
                         "timestamp_s": frame_index / 25.0,
                         "image_ref": f"frames/{Path(frame_rows[frame_uid]['image_ref']).name}",
                         "tracklet_uid": tracklet_uid,
+                        # This is the provider/frame-local detection index,
+                        # not an identity label.  It is retained so a later
+                        # tracker or pose parser can bind keypoints to the
+                        # exact source detection rather than re-sorting boxes.
+                        "source_detection_index": instance_index,
                         "input_mode": "embedded_frame",
                     }
                     split_for_observation[observation_uid] = split

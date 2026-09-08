@@ -93,4 +93,5 @@ def test_gt_identity_stays_out_of_observation_manifest(tmp_path):
     for row in observations:
         assert not forbidden.intersection(row)
         assert not any(value in forbidden for value in row.values() if isinstance(value, str))
+    assert sorted(row["source_detection_index"] for row in observations) == [0, 1]
     assert {row["gt_identity"] for row in truth} == {"female", "male"}
