@@ -1,67 +1,62 @@
-# MAT 总计划与执行记录
+# MAT 主计划与阶段执行记录
 
-版本基于 `MAT_CODEX_MASTER_PROMPT_ZH.md`（2026-09-08）和 `MAT_RESOURCE_SEEDS.json`，不是已完成实验报告。目标是：给同一群动物在参考录制 S0 建立一次 H/A 身份档案，随后在真实日期/条件的独立录像中按时间因果保持持久 ID，同时输出原图坐标二维关键点和可核验纵向运动记录。鱼、牛、猪、鼠切换时使用不同 `SpeciesSpec`、骨架和姿态先验，并建立新的 cohort registry，绝不迁移生物身份。
+本计划依据 `MAT_CODEX_MASTER_PROMPT_ZH.md`、`MAT_RESOURCE_SEEDS.json` 及本轮续执行指令。目标是：在一次参考录制建档后，对同一 cohort 的不同日期/条件录像保持持久身份，同时输出原图坐标二维身体关键点和可核验运动记录。鱼、牛、猪、鼠切换时只切换 `SpeciesSpec`、骨架和姿态先验，并创建新的 cohort registry；绝不把一个物种的身份迁移给另一个物种。
 
 ## 不可改变的边界
 
-1. 数据集、权重、依赖大包不经过 Codex 代理；只由 `DirectOnlyPolicy` 子进程下载。父会话的代理、路由、系统文件和他人训练不改。应用代理已发现，默认路由虽指向 `eno1`，透明代理/TUN 尚未证明不存在，因此大资产先阻塞，允许小元数据和用户授权本地导入。
-2. 远端 Git 仓库先重核查；代码路径 `/data2/usr_for_deadline/MAT`，大资产路径 `/data2/usr_for_deadline/MAT_workspace`。数据、私有 GT、凭据和权重永不 Git。提交只走研究分支，不 force push。
-3. 主协议是 chronological、`offline_within_session`、`end_of_session` 更新：Ss 只能读 Ss 开始的 gallery 快照；已发布预测不可由未来 session 重写。
-4. H-human 需要真实人工确认和时长；oracle 只叫 H-oracle-reference。A 不读取测试身份目录、框、mask 或姿态真值。预定位 Rat/PigReID crop 实验永远标 `input=prelocalized_crops`、`protocol=prelocalized_reid`，不代替端到端 A。
-5. 预测、GT、来源和状态分离。缺少跨日身份映射、人工核验、姿态真值或标定时使用 `BLOCKED_*`/`null`，不编造指标、训练 step、人工分钟数或毫米单位。
+1. 大数据、权重和依赖不经 Codex 代理。当前续执行指令只授权官方 SLEAP gerbils 五个数据对象使用现有服务器代理，且只允许 `storage.googleapis.com`；代理仅在下载子进程中保留。系统代理、bashrc、路由、iptables 和其他进程未改动；凭据不打印、不写 receipt、不入 Git。其余依赖尝试使用直连和已存在本地环境；透明代理/TUN 无法从用户态完全排除时，不继续未知大资产。
+2. 代码仓库为 `/data2/usr_for_deadline/MAT`，大资产和运行时为 `/data2/usr_for_deadline/MAT_workspace`；研究分支为 `research/longitudinal-mat`。不 force push；数据、权重、私有 GT、账号和 token 不入 Git。
+3. gallery 采用 session-start snapshot、`end_of_session` 更新和版本化提交。anchor 永不覆盖/删除；pending 不可作为确认另一个 pending 的主要证据。
+4. 预测、来源和私有真值严格分离。没有人工跨日映射、人工核验或姿态真值时使用 `BLOCKED_*`/`null`，不把预测当 GT，不编造训练时长、step 或指标。provided SLEAP tracking 文件不是人工 GT。
 
-## 交付链和状态
+## M0 — 机器、网络、源码和 metadata 审计
 
-每个阶段写 `docs/PROGRESS.md`，产出 run/asset receipt；状态统一为 `PLANNED`、`DOWNLOADED`、`VERIFIED`、`IMPLEMENTED`、`SMOKE_PASSED`、`RUNNING`、`SUCCEEDED`、`FAILED`、`BLOCKED_*`、`NOT_APPLICABLE`。每个 run 记录 commit、dirty hash、实验/seed/scope、split hash、输入模式、H/A 模式、模型/环境 hash、registry 版本、网络策略、时间、实际 optimizer steps/checkpoint、metrics 和 blockers。
+**状态：`SMOKE_PASSED`。** 已重查实际仓库、分支、`AGENTS.md`、应用代理变量、监听端口、网卡/默认路由、磁盘、Python 环境和 GPU。`nvidia-smi` 显示所有 A100 正被其他任务使用，因此没有触碰 GPU；真实 SLEAP 训练选择 `CUDA_VISIBLE_DEVICES=''` 的 CPU。透明代理/TUN 没有可见证据但不能证明不存在，故未知大资产仍暂停。上游 commit 和实际函数签名写入 `locks/upstream.lock.yaml`、`docs/UPSTREAM_API_MAP.md`；不编造私有 API。
 
-## M0 — 安全、机器、仓库与上游审计（当前已执行）
+## M1 — 资产层和真实 P1 数据
 
-**动作**：重查远端和本地工作树；建立代码/资产目录；检查用户、Python、Git、curl/wget、网卡/路由、磁盘/inode、GPU 和活动进程；仅做小请求；检查应用 proxy、URL 级 Git 配置、curl/wget 配置、LD_PRELOAD/TUN/透明代理迹象；锁定上游源码 commit 和函数签名。
+**状态：`IMPLEMENTED / DOWNLOADED / VERIFIED`（仅 SLEAP P1）。** `AuthorizedProxyPolicy` 与 `DirectOnlyPolicy` 分离，session 的 `trust_env`、host allowlist、重定向和失败收据脱敏均有测试；archive `.part` 后缀校验已修复。CLI 使用 `--network-mode direct-only|authorized-proxy`，默认 direct-only。catalog 中五个 SLEAP URL 为官方入口且 `download_url_verified: true`，provider checksum/expected bytes 未猜测，实际 bytes/SHA 写入 `locks/assets.lock.json` 和工作区 receipts。旧 Rat/Pig/Cow 资产仍未下载。
 
-**交付**：`doctor.json`、`docs/NETWORK_AUDIT.md`、`docs/UPSTREAM_API_MAP.md`、`configs/assets/catalog.yaml`、`locks/upstream.lock.yaml`、`locks/assets.lock.json`、`docs/BLOCKERS.md`。
+SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 train/val/test `.pkg.slp`、`example_5min.mp4` 和 `example_tracking.slp`；总字节数为 **964,739,339**。下载使用授权代理且 receipt 的 `route_status=AUTHORIZED_PROXY`；所有文件已 SHA-256 复核并以 hardlink 暴露到固定目录。SLEAP-NN/sleap-io、WildlifeTools 和运行时依赖放在工作区隔离环境，不进 Git；当前版本 wheel 已重新用去代理直连保存到 `upstream_audit` wheelhouse。早期启动 runtime 的历史 `pip_download_proxy.log`/安装日志也保留（仅轻量依赖、无数据/权重），不把它当作大资产合规证明，后续禁止复用代理安装。
 
-**现场结果**：GitHub `main` 通过小型 `ls-remote` 重核查为空；应用层 `http_proxy/https_proxy/all_proxy`（大小写）存在，本地有 7890/7891 监听；`LD_PRELOAD` 未设置，接口仅 `eno1/eno2/lo`，默认路由经 `202.205.84.1`，没有可见 TUN；直连 GitHub 30 秒超时。故 `application_proxy_bypass=true`，`route_status=DIRECT_ROUTE_UNVERIFIED`，大资产 `BLOCKED_DIRECT_ROUTE`。GPU 0 有 A100 40GB 且正在使用，不启动训练，不碰其他 GPU 进程。
+## M2 — 适配、匿名 manifest、冻结边界和 B0 条件
 
-**通过条件**：代理/路由风险写清；没有秘密；每个拟下载资产有入口、许可证、大小/哈希未知标记和预算；不把规划字段写成已下载。
+**状态：`SMOKE_PASSED / BLOCKED_MISSING_IDENTITY_ASSET`。** `SleapGerbilsAdapter` 使用公开 `sleap_io.load_slp`，保持 source filename/video index，生成中性 `frames/sessions/observations` 与仅供评价的 `private_pose_identity_truth`；`observations.jsonl` 不含身份、keypoint GT 或 visibility GT。已对 23 个 source-video sessions 用 seed 17 实际冻结 `13/4/6` source/development/sealed 划分（`f1a04319e89f90a6`），但 provider 文件本身仍是 random frame split，不能解释为 strict longitudinal split。B0 的 global-only static gallery/固定 S0 mapping 链保留；真实 MegaDescriptor-T-224 checkpoint/config 未在本机 cache，HF 直连不可达且未获权重代理授权，所以不以 ImageNet Swin 或随机特征冒充 B0 结果。
 
-## M1 — 无代理资产层、元数据和离线资产（已实现代码，资产受阻）
+## M3 — 真实 SLEAP pose baseline、predict 和 tracking smoke
 
-实现 `DirectOnlyPolicy`、`AssetCatalog`、限额 `AssetDownloader.probe/fetch`、安全重定向、Range/续传、sha256/官方校验、zip-slip 检查、原子 receipt 和 `import_local`。先拿作者 metadata/README 和源代码版本；不进行 9–50GB 数据或未知权重传输。只有直连路由得到管理员核验，或用户给出授权原件，才进入 P1 下载。依赖用隔离 wheelhouse；推断设离线变量并缺权重失败。
+**状态：`SMOKE_PASSED / PARTIALLY_EVALUATED`。** 只调用官方 `sleap-nn` CLI；首次 `--version`、`config/train/predict/eval --help` 原文和 command receipts 在 `MAT_workspace/upstream_audit/sleap_nn/`。实际版本为 `sleap-nn 0.3.3`。官方 `config --auto --pipeline bottomup` 生成 training config；修复了 val list、typed validation_fraction 和 skia API 兼容性后，CPU 2-epoch smoke 真正完成：`best.ckpt`/`last.ckpt` 在 `runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/`，checkpoint `global_step=2`，optimizer step=2，epoch=0/1，training log 的第 1 行记录 train loss 0.019036、val loss 0.018798。CLI 随后的全量 train/val post-eval 在 CPU 上长时间运行，已有 checkpoint 后被终止，原始 receipt 保留 `return_code=-15`，不记为完整 CLI 成功。
 
-**P1 选择规则**：Rat ID（MD5 由官方 API 实时锁定）＋ PigReID 少量跨日组＋一套轻量身份权重。先索引而不全量解压；四组的源/dev/封存划分由实际 metadata 固化，绝不利用 EID 路径给模型喂标签。
+使用真实 checkpoint 对 test labeled frames 的官方 predict 已返回 0，42 labels/0 instances；官方 eval 明确输出 `SUCCEEDED_NO_PREDICTIONS` 且不产生 NPZ，不能报告 pose 数字。对真实 `example_5min.mp4`（1280×1024、25 FPS、2560 帧，实测约 102.4 s）连续帧 0–15 运行了官方 `predict --tracking`，输出 16 帧 SLP、0 instances；这是 **tracking format smoke，不是全片完成，也不是 GT 评价**。完整 2560 帧 CPU 推理未运行，标记 `BLOCKED_CPU_BUDGET`。
 
-## M2 — 适配、匿名清单、冻结划分与真实 B0 pilot（代码就绪，数据受阻）
+## M4 — H/A 建档和跨 session runner
 
-`DatasetAdapter` 分离 observations/source labels/reference annotations/private truth；Rat/PigReID/PigTracking/MultiCamCows 适配器只暴露中性 UID；schema 断言、重复/同事件泄漏检查和按 group/identity/session 的冻结 split。B0 为冻结全局 descriptor＋静态 gallery＋固定 S0 mapping，支持 unknown 和 scope=pilot。没有真实 P1 原件时不运行伪造结果，run manifest 记 `BLOCKED_MISSING_ASSET`。
+**状态：`IMPLEMENTED / BLOCKED_NEEDS_REFERENCE_REVIEW`。** `ManualRegistrar`、`AutoRegistrar` 共用 `EnrollmentResult` 后端；A 聚类现在在每次加入后重算 prototype，并优先检查 cannot-link。`LongitudinalCohortRunner` 固定读取 session-start snapshot，所有 proposals 在 session 结束后一次性提交。真实 SLEAP 没有人工 S0 核验/跨日生物映射，H-human 和 strict longitudinal accuracy 不运行。
 
-## M3 — 姿态/检测、ByteTrack 索引补丁和源 head
+## M5 — 部位证据与安全 memory
 
-锁定 DeepLabCut PyTorch/SuperAnimal 真实兼容版本，使用本地 pose/detector/backbone checkpoint；核验 h5/JSON 字段、骨架语义、xyxy↔xywh 和 crop→全图变换。补丁只给 ByteTrack `STrack` 传播原始 detection index（并固定 dtype），保存 patch 和上游 commit；块处理保持 session tracker 状态，跨 session reset。B2 只训练冻结 backbone 的 source projection/fusion，真实反传才记录 step/checkpoint。
+**状态：`IMPLEMENTED / BLOCKED_MISSING_IDENTITY_ASSET`。** 新增 `PosePartCropper`（真正的 `torchvision.ops.roi_align`、全局/部位 ROI、finite/score/valid 门控、part quality）和不复制 global embedding 的 `PartAwareIdentityEncoder`；B0 matcher 严格 global-only，新增固定 B1 fusion 与 trainable `EvidenceMatcher`。新增 `LongitudinalGalleryStore`（anchor/confirmed/pending、多 exemplar top-k、fingerprint）和确定性的 `MemoryCommitGate`。没有经过核验的 MegaDescriptor，未生成正式 identity 指标。
 
-## M4 — H/A 建档与跨录制 B0/B1
+## M6 — O2 和外部基线
 
-实现 `ManualRegistrar`（contact sheet、中性 UID、S0-only verification JSON）与 `AutoRegistrar`（质量/覆盖代表帧、cannot-link、保守约束凝聚聚类）；同一 `EnrollmentResult` 进入 registry。CohortRunner 逐 session 读取快照并输出 tracklets/assignments。B1 仅作开发集固定质量 EMA/有限 exemplar 的朴素更新；更新污染计入指标。
+**状态：`NOT_APPLICABLE`。** O1/真实跨 session 身份数据、许可和姿态/检测输入不足，不启动 O2、idtracker.ai、idmatcherai 或 CowIDentifier。
 
-## M5 — B3 部位证据与 O1 隔离式 memory
+## M7 — strict split 和联合评价
 
-实现冻结 MegaDescriptor 全局＋可见语义部位 crop、无共同部位时 global fallback、姿态只对齐身份外观；`ConflictGraphBuilder` 和可解释受约束分配允许不重叠碎片共享 ID、同相机同时冲突，unknown 是每轨迹自己的选项。`GalleryStore` 的 anchors/quarantine/committed、expected-version commit、rollback、事件日志和 encoder fingerprint 完整可审计。B0/B1/B2/B3/O1 共用缓存，每次消融只变一个因素。
+**状态：`BLOCKED_NEEDS_POSE_GT / BLOCKED_NEEDS_CROSS_DAY_MAPPING`。** SLEAP 官方 train/val/test 只用于 `SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE`。strict longitudinal split、人工跨日 ID 映射、连续人工 pose GT 尚不存在；`PoseEvaluator`、固定 S0 mapping、unknown/confusion 输出边界已保留，未填假指标。
 
-## M6 — O2 与强外部基线（条件执行）
+## M8 — 封存和复现交付
 
-仅 O1 有可靠数据和自监督信号才尝试 O2；保留 anchor 编码器或从所有历史 crop 重编码后原子切换 gallery，严禁跨 fingerprint 直接 cosine。独立环境真实运行 idtracker.ai/idmatcherai 和适用 CowIDentifier；缺原视频/session 或许可不符写 `NOT_APPLICABLE`，不伪造 session。
+**状态：`RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。** `mat baseline sleap-gerbils --stage all` 和四个 `mat experiment` 入口已生成真实 run receipts；源码、配置、脱敏报告和契约测试准备分阶段提交到研究分支。工作区数据、checkpoint、wheelhouse、私有 truth 不提交。最终 `docs/PROGRESS.md` 和 `docs/RESULTS_GERBILS_V0_V2.md` 明列实际事实、阻塞和下一条命令。
 
-## M7 — 封存正式实验与联合姿态评价
+## 下一条可执行命令
 
-冻结 split/阈值/预算后运行至少预设 seeds（17/42/2026），共同缓存可复用。局部 MOT（TrackEval）与持久 ID 评价分开；S0 mapping 永久冻结，报告漏检/unknown/错认/拒绝/连接延迟/持续时长/建档重复混合。PoseEvaluator 只用真实人工/辅助 GT；IdentityAwarePoseEvaluator 同时要求实例、持久 ID、部位和预定误差。缺姿态 GT 则交可执行 annotation manifest 和 `BLOCKED_NEEDS_POSE_GT`。
-
-## M8 — 论文级可复现交付
-
-清理仅 MAT 中间产物（不删除用户原数据）；补齐许可证、依赖锁、RUNBOOK/METHOD/claim-evidence、预测导出和图表脚本。研究分支分阶段提交，暂存审计、远端 SHA 核验；最终状态仅在必要阶段实际满足时叫 `COMPLETE`，否则为 `RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。
-
-## 当前执行顺序
-
-1. 完成 M0 文档、doctor 和真实上游 commit/API 小核验。
-2. 完成 M1 资产策略、catalog、receipts 和本地导入；直连未核验不下大文件。
-3. 完成 M2 适配/匿名清单/冻结 split/B0 代码和 fixture 契约测试；等待 P1 原件后立即跑真实 pilot。
-4. 在不依赖大资产的范围继续 M4/M5 核心 registry、匹配和评价逻辑；M3/M6/M7 的外部运行保持明确阻塞。
-
+```bash
+export MAT_WORK_ROOT=/data2/usr_for_deadline/MAT_workspace
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli data inspect --dataset sleap_gerbils --work-root "$MAT_WORK_ROOT"
+# 有授权的 MegaDescriptor-T-224 config + checkpoint 原件后，先用 GlobalIdentityBackend.from_local 校验架构/SHA/keys，
+# 再从 SLEAP 中性 observations 生成 S0/query crops，运行真实 B0_global_static_gallery。
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli split freeze \
+  --manifest "$MAT_WORK_ROOT/prepared/sleap_gerbils/manifests/sessions.jsonl" \
+  --field session_uid --seed 17
+```

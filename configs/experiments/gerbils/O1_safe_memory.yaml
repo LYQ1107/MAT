@@ -1,0 +1,32 @@
+schema_version: mat.experiment.v1
+experiment_id: O1_safe_memory
+dataset: sleap_gerbils
+split: {unit: session, strategy: random_frame_reference_only, seed: 17}
+protocol:
+  enrollment: human
+  session_order: chronological
+  prediction_mode: offline_within_session
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: false
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+pose: {backend: sleap_nn, checkpoint: null, keypoints: gerbil_14}
+identity:
+  backend: wildlife_tools
+  descriptor: megadescriptor_t_224
+  checkpoint: null
+  feature_scope: global_and_parts
+  part_groups: [head, front_trunk, rear_trunk, tail_base, tail_distal]
+  train_backbone: false
+matcher: {architecture: evidence_matcher, trainable_head: true, solver: deterministic_greedy}
+memory:
+  policy: quarantine_commit
+  immutable_anchor: true
+  score_roles: [anchor, confirmed]
+  pending_excluded_from_scoring: true
+  promote_after_sessions: 2
+  min_quality: 0.6
+  rollback_on_conflict: true
+evaluation: {identity_mapping: reference_only, pose_gt: unavailable, status: blocked_missing_identity_asset}

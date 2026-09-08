@@ -1,0 +1,34 @@
+schema_version: mat.experiment.v1
+experiment_id: sleap_pose_baseline
+dataset: sleap_gerbils
+split:
+  unit: session
+  strategy: random_frame_reference_only
+  seed: 17
+protocol:
+  enrollment: oracle_reference
+  session_order: chronological
+  prediction_mode: offline_within_session
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: false
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+pose:
+  backend: sleap_nn
+  pipeline: bottomup
+  nodes: 14
+  source_labels: train.pkg.slp
+  validation_labels: val.pkg.slp
+  test_labels: test.pkg.slp
+  offline: true
+identity:
+  backend: wildlife_tools
+  descriptor: megadescriptor_t_224
+  checkpoint: null
+  train_backbone: false
+evaluation:
+  pose_metrics: official_sleap_eval
+  identity_metrics: null
+  status: blocked_without_pose_gt_and_cross_day_mapping
