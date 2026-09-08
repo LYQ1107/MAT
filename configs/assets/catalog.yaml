@@ -1,5 +1,5 @@
 schema_version: mat.asset_catalog.v1
-network: direct_only
+network: mode_selectable
 assets:
   - asset_id: rat_id_v1
     url: https://zenodo.org/records/15112879
@@ -53,3 +53,63 @@ assets:
     max_bytes: 39270266920
     phase: P2
     download_url_verified: false
+  # Official SLEAP gerbil objects.  The URLs are fixed from the upstream
+  # dataset documentation; provider checksums are intentionally unknown until
+  # the bytes are downloaded and hashed locally.
+  - asset_id: sleap_gerbils_train
+    url: https://storage.googleapis.com/sleap-data/datasets/nyu-gerbils/cohort1_compressedTalmo_23vids_march_7_to_march_17/random_split1.day001/train.pkg.slp
+    role: official SLEAP gerbils pose labels, random split train
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: sleap-data:nyu-gerbils/random_split1.day001
+    allowed_hosts: [storage.googleapis.com]
+    max_bytes: 5368709120
+    phase: P1
+    download_url_verified: true
+  - asset_id: sleap_gerbils_val
+    url: https://storage.googleapis.com/sleap-data/datasets/nyu-gerbils/cohort1_compressedTalmo_23vids_march_7_to_march_17/random_split1.day001/val.pkg.slp
+    role: official SLEAP gerbils pose labels, random split validation
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: sleap-data:nyu-gerbils/random_split1.day001
+    allowed_hosts: [storage.googleapis.com]
+    max_bytes: 5368709120
+    phase: P1
+    download_url_verified: true
+  - asset_id: sleap_gerbils_test
+    url: https://storage.googleapis.com/sleap-data/datasets/nyu-gerbils/cohort1_compressedTalmo_23vids_march_7_to_march_17/random_split1.day001/test.pkg.slp
+    role: official SLEAP gerbils pose labels, random split test
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    source_revision: sleap-data:nyu-gerbils/random_split1.day001
+    allowed_hosts: [storage.googleapis.com]
+    max_bytes: 5368709120
+    phase: P1
+    download_url_verified: true
+  - asset_id: sleap_gerbils_clip
+    url: https://storage.googleapis.com/sleap-data/datasets/nyu-gerbils/clips/2020-3-10_daytime_5mins_compressedTalmo%403200-5760.mp4
+    role: official SLEAP gerbils continuous five-minute example clip
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    source_revision: sleap-data:nyu-gerbils/clips/2020-3-10_daytime_5mins
+    allowed_hosts: [storage.googleapis.com]
+    max_bytes: 10737418240
+    phase: P1
+    download_url_verified: true
+  - asset_id: sleap_gerbils_tracking
+    url: https://storage.googleapis.com/sleap-data/datasets/nyu-gerbils/clips/2020-3-10_daytime_5mins_compressedTalmo%403200-5760.slp
+    role: official SLEAP gerbils example tracking labels for format/sanity check only
+    license: null
+    expected_bytes: null
+    provider_checksum: null
+    source_revision: sleap-data:nyu-gerbils/clips/2020-3-10_daytime_5mins
+    allowed_hosts: [storage.googleapis.com]
+    max_bytes: 5368709120
+    phase: P1
+    download_url_verified: true

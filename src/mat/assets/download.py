@@ -9,6 +9,7 @@ from urllib.parse import urlparse, urlunparse
 import hashlib
 import json
 import os
+import re
 import time
 
 import requests
@@ -25,6 +26,20 @@ def _origin(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
+def _redact_failure(exc: Exception) -> str:
+    """Keep receipts useful without persisting ambient proxy credentials/URLs."""
+    message = f"{type(exc).__name__}: {exc}"
+    for name in ("http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        value = os.environ.get(name)
+        if value:
+            message = message.replace(value, "<proxy-redacted>")
+    # Requests/urllib3 may normalize a proxy URL before including it in an
+    # exception. Remove userinfo even when the exact environment spelling is
+    # no longer present.
+    message = re.sub(r"(?i)https?://[^\s'\")]+", "<url-redacted>", message)
+    return message[:2000]
+
+
 class AssetDownloader:
     def __init__(self, destination_root: Path, *, max_probe_bytes: int = 64 * 1024,
                  max_retries: int = 3, timeout: tuple[float, float] = (15.0, 30.0)):
@@ -34,9 +49,9 @@ class AssetDownloader:
         self.timeout = timeout
 
     @staticmethod
-    def _session() -> requests.Session:
+    def _session(policy: DirectOnlyPolicy) -> requests.Session:
         session = requests.Session()
-        session.trust_env = False
+        session.trust_env = policy.trust_env
         session.headers.update({"User-Agent": "MAT-AssetDownloader/0.1", "Accept-Encoding": "identity"})
         return session
 
@@ -57,7 +72,7 @@ class AssetDownloader:
         policy.validate_url(asset.url, asset.asset_id)
         current = asset.url
         chain: list[str] = [_origin(current)]
-        session = self._session()
+        session = self._session(policy)
         for _ in range(8):
             response = session.request(method, current, headers=headers or {}, stream=stream,
                                        allow_redirects=False, timeout=self.timeout)
@@ -101,7 +116,7 @@ class AssetDownloader:
                                 chain[-1], policy.route_status, started)
         except Exception as exc:
             return ProbeReceipt(asset.asset_id, "FAILED", None, None, None, 0, (), _origin(asset.url),
-                                policy.route_status, started, str(exc))
+                                policy.route_status, started, _redact_failure(exc))
 
     def fetch(self, asset: AssetSpec, policy: DirectOnlyPolicy) -> ArtifactReceipt:
         started = datetime.now(timezone.utc).isoformat()
@@ -165,7 +180,14 @@ class AssetDownloader:
             if asset.expected_bytes is not None and received != asset.expected_bytes:
                 raise IntegrityError(f"size mismatch: expected {asset.expected_bytes}, got {received}")
             digest = verify_file(part, asset.expected_bytes, asset.provider_checksum, asset.checksum_algorithm)
-            if part.suffix.lower() in {".zip", ".tar", ".gz", ".tgz"}:
+            # ``part`` ends in ``.part`` (for example ``archive.zip.part``), so
+            # checking ``part.suffix`` silently skipped archive validation.  Use
+            # the final published name and, when supplied, the catalog hint.
+            archive_type = (asset.archive_type or "").lower().lstrip(".")
+            target_suffixes = "".join(target.suffixes).lower()
+            is_archive = archive_type in {"zip", "tar", "gz", "tgz", "tar.gz"}
+            is_archive = is_archive or target_suffixes.endswith((".zip", ".tar", ".gz", ".tgz", ".tar.gz"))
+            if is_archive:
                 validate_archive(part, self.destination_root / "archive_check")
             os.replace(part, target)
             receipt = ArtifactReceipt(asset.asset_id, "VERIFIED", str(target), received, resumed,
@@ -179,7 +201,7 @@ class AssetDownloader:
                                       part.stat().st_size if part.exists() else 0,
                                       asset.provider_checksum, None, asset.expected_bytes, _origin(asset.url),
                                       asset.source_revision, asset.license, policy.route_status, started,
-                                      datetime.now(timezone.utc).isoformat(), failure_reason=str(exc))
+                                      datetime.now(timezone.utc).isoformat(), failure_reason=_redact_failure(exc))
             receipt.write(receipt_path)
             return receipt
 

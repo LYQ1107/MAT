@@ -23,6 +23,7 @@ class AssetSpec:
     phase: str = "P0"
     metadata_url: str | None = None
     download_url_verified: bool = False
+    archive_type: str | None = None
 
     def __post_init__(self) -> None:
         if not self.asset_id or not self.url:
