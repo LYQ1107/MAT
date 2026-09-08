@@ -375,6 +375,10 @@ def run_b0_oracle_crop_diagnostic(samples: Sequence[GerbilInstanceSample],
                               {key: len(value) for key, value in anchors.items()}, (), {}, None,
                               f"{type(exc).__name__}: {exc}")
     query = [sample for sample in samples if sample.session_uid not in set(s0)]
+    if not query:
+        return GerbilB0Result("BLOCKED_MISSING_QUERY_SESSIONS", "oracle_crop_diagnostic", "H_oracle_reference",
+                              s0, {key: len(value) for key, value in anchors.items()}, (), {}, snapshot.version,
+                              "no labeled session remains outside the fixed S0 reference")
     boxes = {}
     for sample in query:
         truth = truth_by_observation.get(sample.observation_uid, {})
@@ -417,6 +421,10 @@ def run_b0_predicted_pose(samples: Sequence[GerbilInstanceSample],
                               {key: len(value) for key, value in anchors.items()}, (), {}, None,
                               f"{type(exc).__name__}: {exc}")
     query = [sample for sample in samples if sample.session_uid not in set(s0)]
+    if not query:
+        return GerbilB0Result("BLOCKED_MISSING_QUERY_SESSIONS", "predicted_pose", "H_oracle_reference",
+                              s0, {key: len(value) for key, value in anchors.items()}, (), {}, snapshot.version,
+                              "no query session remains outside the fixed S0 reference")
     boxes: dict[str, np.ndarray] = {}
     for sample in query:
         prediction = predicted_pose.get(sample.observation_uid, {})
