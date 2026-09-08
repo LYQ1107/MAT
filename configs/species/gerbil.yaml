@@ -1,0 +1,43 @@
+schema_version: mat.species.v1
+species_id: gerbil
+display_name: Mongolian gerbil (SLEAP NYU cohort)
+keypoints:
+  - nose
+  - left_eye
+  - right_eye
+  - left_ear
+  - right_ear
+  - spine1
+  - spine2
+  - spine3
+  - spine4
+  - spine5
+  - tail1
+  - tail2
+  - tail3
+  - tail4
+edges:
+  - [spine1, left_eye]
+  - [spine1, left_ear]
+  - [spine1, nose]
+  - [spine1, right_eye]
+  - [spine1, right_ear]
+  - [spine2, spine1]
+  - [spine3, spine2]
+  - [spine3, spine4]
+  - [spine4, spine5]
+  - [spine5, tail1]
+  - [tail1, tail2]
+  - [tail2, tail3]
+  - [tail3, tail4]
+part_groups:
+  head: [nose, left_eye, right_eye, left_ear, right_ear, spine1]
+  front_trunk: [spine1, spine2, spine3]
+  rear_trunk: [spine3, spine4, spine5]
+  tail_base: [spine5, tail1, tail2]
+  tail_distal: [tail2, tail3, tail4]
+ablations:
+  - global_only
+  - global_plus_head
+  - global_plus_trunk
+  - global_plus_all_visible_parts

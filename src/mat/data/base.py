@@ -27,6 +27,7 @@ class DatasetInventory:
     capabilities: dict[str, bool | None] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     parse_failures: list[dict[str, str]] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)
 
     def write(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
