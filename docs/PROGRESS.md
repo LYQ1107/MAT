@@ -2,6 +2,10 @@
 
 当前总状态：`RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。本轮没有占用他人 GPU，没有把预测当 GT，也没有提交数据、权重或凭据。
 
+## 已推送阶段提交
+
+`e7ffa71` asset policy → `64b025b` gerbil adapter → `6ad87b3` SLEAP baseline → `4d33481` pose-conditioned features → `39dd3cf` evidence matcher → `5fec8b9` safe memory → `ea91c28` report/configuration。全部提交均为非 force fast-forward，最终远端 SHA 已核验。
+
 ## M0—M8
 
 | 阶段 | 状态 | 证据/阻塞 |
@@ -14,7 +18,7 @@
 | M5 | `IMPLEMENTED / BLOCKED_MISSING_IDENTITY_ASSET` | ROIAlign part encoder、B1 fusion、EvidenceMatcher、三层 gallery、commit gate 已实现；无核验 identity checkpoint |
 | M6 | `NOT_APPLICABLE` | O2/idtracker.ai/idmatcherai/CowIDentifier 缺输入或许可 |
 | M7 | `BLOCKED_NEEDS_POSE_GT / BLOCKED_NEEDS_CROSS_DAY_MAPPING` | 没有连续人工 pose GT 或跨日 biological-ID 映射 |
-| M8 | `PLANNED` | 正在分阶段提交并核对远端 SHA |
+| M8 | `SUCCEEDED` | 7 个阶段提交已逐一 fast-forward push；最终 `git rev-parse` 与 `git ls-remote` 均为 `ea91c28975b6ff71f05f418755c9b817e4202d17` |
 
 ## 已实际执行的 SLEAP 数据链
 

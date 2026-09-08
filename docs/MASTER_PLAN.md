@@ -47,7 +47,7 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M8 — 封存和复现交付
 
-**状态：`RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。** `mat baseline sleap-gerbils --stage all` 和四个 `mat experiment` 入口已生成真实 run receipts；源码、配置、脱敏报告和契约测试准备分阶段提交到研究分支。工作区数据、checkpoint、wheelhouse、私有 truth 不提交。最终 `docs/PROGRESS.md` 和 `docs/RESULTS_GERBILS_V0_V2.md` 明列实际事实、阻塞和下一条命令。
+**状态：`RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。** `mat baseline sleap-gerbils --stage all` 和四个 `mat experiment` 入口已生成真实 run receipts；7 个阶段提交已非 force fast-forward 推送，最终远端 SHA 为 `ea91c28975b6ff71f05f418755c9b817e4202d17`。工作区数据、checkpoint、wheelhouse、私有 truth 不提交。最终 `docs/PROGRESS.md` 和 `docs/RESULTS_GERBILS_V0_V2.md` 明列实际事实、阻塞和下一条命令。
 
 ## 下一条可执行命令
 
