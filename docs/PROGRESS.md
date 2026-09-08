@@ -4,7 +4,7 @@
 
 ## 已推送阶段提交
 
-`e7ffa71` asset policy → `64b025b` gerbil adapter → `6ad87b3` SLEAP baseline → `4d33481` pose-conditioned features → `39dd3cf` evidence matcher → `5fec8b9` safe memory → `ea91c28` report/configuration；随后 `b30baf4` 完成 M8 文档收尾。全部提交均为非 force fast-forward，最终远端 SHA 已核验。
+`e7ffa71` asset policy → `64b025b` gerbil adapter → `6ad87b3` SLEAP baseline → `4d33481` pose-conditioned features → `39dd3cf` evidence matcher → `5fec8b9` safe memory → `ea91c28` report/configuration；随后仅有文档收尾提交。全部提交均为非 force fast-forward，SHA 核验命令为：`git rev-parse HEAD && git ls-remote origin refs/heads/research/longitudinal-mat`。
 
 ## M0—M8
 
@@ -18,7 +18,7 @@
 | M5 | `IMPLEMENTED / BLOCKED_MISSING_IDENTITY_ASSET` | ROIAlign part encoder、B1 fusion、EvidenceMatcher、三层 gallery、commit gate 已实现；无核验 identity checkpoint |
 | M6 | `NOT_APPLICABLE` | O2/idtracker.ai/idmatcherai/CowIDentifier 缺输入或许可 |
 | M7 | `BLOCKED_NEEDS_POSE_GT / BLOCKED_NEEDS_CROSS_DAY_MAPPING` | 没有连续人工 pose GT 或跨日 biological-ID 映射 |
-| M8 | `SUCCEEDED` | 7 个阶段提交已逐一 fast-forward push（末提交 `ea91c28975b6ff71f05f418755c9b817e4202d17`）；文档收尾后最终 `git rev-parse`/`git ls-remote` 均为 `b30baf41f8f41bc600b69b5f0430bc5c45b7745b` |
+| M8 | `SUCCEEDED` | 7 个阶段提交及后续文档收尾均为非 force fast-forward push；每次 push 后均执行 `git rev-parse HEAD` 与 `git ls-remote origin refs/heads/research/longitudinal-mat` 核验（当前值以该命令为准） |
 
 ## 已实际执行的 SLEAP 数据链
 
