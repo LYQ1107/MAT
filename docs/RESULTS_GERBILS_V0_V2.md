@@ -5,7 +5,7 @@
 | Method | Pose source | ID feature | Matcher | Memory | Enrollment | Persistent ID | Unknown | ID-aware Pose |
 |---|---|---|---|---|---|---|---|---|
 | SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE (smoke) | SLEAP-NN 0.3.3 bottomup，2 epochs CPU，`global_step=2` | NOT_RUN（smoke 仅为姿态链路验证） | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
-| SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE (formal) | SLEAP-NN 0.3.3 bottomup，GPU 1，计划 50 epochs（运行中；已到 epoch 11 / `global_step=2400`，非最终结果） | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
+| SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE (formal) | SLEAP-NN 0.3.3 bottomup，GPU 1，计划 50 epochs（运行中；已到 epoch 12 / `global_step=2600`，非最终结果） | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
 | B0_global_static_gallery | 等待 formal full pose test（smoke 的 42 labels/0 instances 不得复用） | MegaDescriptor-T-224（官方本地文件已校验） | global cosine（代码已实现） | static S0 snapshot（代码已实现） | H_oracle_reference/A_auto code path；真实 S0 尚未提交 | NOT_RUN — `BLOCKED_POSE_TEST_NOT_SUCCEEDED` | null | NOT_RUN — `BLOCKED_NEEDS_POSE_GT` |
 | B1_part_static | SLEAP pose + pose-derived ROI（代码/契约 forward） | global + ROIAlign head/trunk/tail parts | fixed quality-weighted fusion（代码已实现） | static | NOT_RUN | NOT_RUN | null | NOT_RUN |
 | B1 EvidenceMatcher | NOT_RUN | global/part pair MLP（实现但未训练） | trainable evidence head | static | NOT_RUN | NOT_RUN | null | NOT_RUN |
@@ -15,7 +15,7 @@
 
 - 数据：`MAT_workspace/datasets/sleap_gerbils/` 五个官方对象合计 964,739,339 bytes；SHA 和 split 计数见 [`docs/PROGRESS.md`](PROGRESS.md)。
 - smoke checkpoint：`MAT_workspace/runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/best.ckpt`；训练 log 的第 1 个 epoch train/val loss 分别为 0.019036374986171722/0.018797585740685463。两步 optimizer 确认于 checkpoint `global_step=2`，只用于 smoke。
-- formal checkpoint 目录：`MAT_workspace/runs/sleap_gerbils_pose_full/`；GPU 1 的正式训练命令、PID 和实时 log 在 `formal_training_launch.json` 及其模型目录，当前仅确认到 epoch 11 / `global_step=2400`，不作为最终结果。
+- formal checkpoint 目录：`MAT_workspace/runs/sleap_gerbils_pose_full/`；GPU 1 的正式训练命令、PID 和实时 log 在 `formal_training_launch.json` 及其模型目录，当前仅确认到 epoch 12 / `global_step=2600`，不作为最终结果。
 - 旧 smoke test 官方 eval：模型在 peak threshold 0.2 与 0.15（max 4）均没有 predicted instances，官方 CLI 因此跳过 metric NPZ；不能报告 mAP/PCK/像素误差。formal test 尚未运行。
 - Tracking：真实视频连续帧 0–15 的 `--tracking` 命令成功，输出 16 帧 SLP；完整 2,560 帧未跑完，且没有可靠人工 tracking GT，故不计算 HOTA/ID switch。
 
