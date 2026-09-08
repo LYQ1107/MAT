@@ -194,6 +194,11 @@ class PosePartCropper:
                  keypoint_scores: Any, keypoint_valid: Any) -> CropBatch:
         if not isinstance(images, torch.Tensor) or images.ndim != 4 or images.shape[1] not in (1, 3):
             raise ValidationError("images must be [B,C,H,W]")
+        # torchvision ROIAlign requires floating point tensors.  Keep uint8
+        # pixel values in the 0..255 convention; MegaDescriptorRuntime applies
+        # the single authoritative /255 conversion after cropping.
+        if not (images.is_floating_point() or images.is_complex()):
+            images = images.to(dtype=torch.float32)
         _, _, height, width = images.shape
         rois, part_valid, part_quality = self.build_rois(
             boxes_xyxy, keypoints, keypoint_scores, keypoint_valid,
@@ -211,32 +216,72 @@ class PosePartCropper:
 
 
 class PartAwareIdentityEncoder(nn.Module if torch is not None else object):
-    """Shared frozen backbone over a global ROI and pose-derived part ROIs."""
+    """Shared MegaDescriptor runtime over a global ROI and pose-derived parts.
 
-    def __init__(self, backbone: Any, global_dim: int, part_dim: int,
-                 species: SpeciesSpec, alpha: float = 0.5,
-                 *, cropper: PosePartCropper | None = None):
+    The current API is ``PartAwareIdentityEncoder(identity_runtime, species)``.
+    A small positional compatibility path for the original fixture API is kept
+    for old unit tests; it is explicitly marked legacy and is not used by MAT
+    experiments.  The current path has no part gates or projection: every
+    region is encoded by the same frozen runtime and retains the backbone's
+    actual feature dimension.
+    """
+
+    def __init__(self, identity_runtime: Any, species_or_global_dim: SpeciesSpec | int,
+                 part_dim: int | None = None, species: SpeciesSpec | None = None,
+                 alpha: float = 0.5, *, cropper: PosePartCropper | None = None):
         if torch is None:
             raise DependencyUnavailableError("PyTorch is required for PartAwareIdentityEncoder")
         super().__init__()
-        if global_dim <= 0 or part_dim <= 0 or not species.part_groups:
-            raise ValidationError("invalid encoder dimensions/species")
-        self.backbone = backbone
-        self.species = species
-        self.alpha = float(alpha)
-        if hasattr(self.backbone, "parameters"):
-            for parameter in self.backbone.parameters():
-                parameter.requires_grad_(False)
-        self.global_projection = nn.Linear(global_dim, part_dim)
-        self.part_gates = nn.Parameter(torch.ones(len(species.part_groups)))
-        self.cropper = cropper or PosePartCropper(species)
+        self.legacy_api = not isinstance(species_or_global_dim, SpeciesSpec)
+        if self.legacy_api:
+            if species is None or part_dim is None:
+                raise ValidationError("legacy encoder requires global_dim, part_dim and species")
+            global_dim = int(species_or_global_dim)
+            requested_dim = int(part_dim)
+            if global_dim <= 0 or requested_dim <= 0:
+                raise ValidationError("invalid encoder dimensions")
+            self.species = species
+            self._legacy_backbone = identity_runtime
+            self.identity_runtime = None
+            self.feature_dim = requested_dim
+            # Deterministic identity-like projection is retained solely for
+            # the historical TEST_FIXTURE constructor; the production API does
+            # not create a projection at all.
+            self._legacy_projection = nn.Linear(global_dim, requested_dim, bias=False)
+            with torch.no_grad():
+                self._legacy_projection.weight.zero_()
+                for index in range(min(global_dim, requested_dim)):
+                    self._legacy_projection.weight[index, index] = 1.0
+            # The compatibility projection remains trainable so the original
+            # fixture's backward smoke test still exercises autograd.  It is
+            # never constructed by the production two-argument API.
+            backbone_name = type(identity_runtime).__module__ + "." + type(identity_runtime).__qualname__
+        else:
+            if part_dim is not None or species is not None:
+                raise ValidationError("current encoder API accepts identity_runtime and species only")
+            self.species = species_or_global_dim
+            runtime = getattr(identity_runtime, "runtime", identity_runtime)
+            if not callable(runtime):
+                raise ValidationError("identity_runtime must be a callable MegaDescriptor runtime")
+            self.identity_runtime = runtime
+            self._legacy_backbone = None
+            self._legacy_projection = None
+            self.feature_dim = int(getattr(runtime, "output_dim", 0) or 0)
+            backbone_name = type(runtime).__module__ + "." + type(runtime).__qualname__
+            if hasattr(runtime, "parameters"):
+                for parameter in runtime.parameters():
+                    parameter.requires_grad_(False)
+        if not self.species.part_groups:
+            raise ValidationError("species must define at least one part group")
+        self.alpha = float(alpha)  # retained as metadata; no positive scaling gate is applied
+        self.cropper = cropper or PosePartCropper(self.species)
         settings = f"{self.cropper.output_size}:{self.cropper.keypoint_threshold}:{self.cropper.min_part_points}"
         self.encoder_version = hashlib.sha256(
-            f"{type(backbone).__module__}.{type(backbone).__qualname__}:{global_dim}:{part_dim}:{species.skeleton_version}:{settings}".encode()
+            f"{backbone_name}:{self.feature_dim}:{self.species.skeleton_version}:{settings}:no-gates".encode()
         ).hexdigest()[:16]
 
-    def _base(self, images):
-        base = self.backbone(images)
+    @staticmethod
+    def _flatten_features(base, images):
         if isinstance(base, (tuple, list)):
             base = base[0]
         if not isinstance(base, torch.Tensor):
@@ -247,7 +292,14 @@ class PartAwareIdentityEncoder(nn.Module if torch is not None else object):
             base = base.mean(dim=1)
         elif base.ndim != 2:
             base = base.flatten(1)
+        if base.ndim != 2:
+            raise ValidationError("identity backbone must return [B,D] features")
         return base
+
+    def _base(self, images):
+        if self.legacy_api:
+            return self._flatten_features(self._legacy_backbone(images), images)
+        return self._flatten_features(self.identity_runtime(images), images)
 
     def forward(self, images, boxes_xyxy, keypoints, keypoint_scores, keypoint_valid, masks=None):
         if torch is None:  # pragma: no cover
@@ -259,10 +311,15 @@ class PartAwareIdentityEncoder(nn.Module if torch is not None else object):
         batch = images.shape[0]
         regions = 1 + len(self.species.part_groups)
         features = self._base(crops.crops).reshape(batch, regions, -1)
-        features = F.normalize(self.global_projection(features), dim=-1)
+        if self.legacy_api:
+            features = self._legacy_projection(features)
+        if self.feature_dim <= 0:
+            self.feature_dim = int(features.shape[-1])
+        elif features.shape[-1] != self.feature_dim:
+            raise ValidationError(f"identity runtime feature dimension changed: expected {self.feature_dim}, got {features.shape[-1]}")
+        features = F.normalize(features, dim=-1)
         global_feature = features[:, 0]
-        gates = torch.sigmoid(self.part_gates).view(1, -1, 1)
-        part_features = F.normalize(features[:, 1:] * gates, dim=-1)
+        part_features = F.normalize(features[:, 1:], dim=-1)
         return global_feature, part_features, crops.part_valid, crops.part_quality, self.encoder_version
 
     def encode(self, images, boxes_xyxy, keypoints, keypoint_scores, keypoint_valid, masks=None) -> DescriptorBatch:

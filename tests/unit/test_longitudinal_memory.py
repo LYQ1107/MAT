@@ -65,5 +65,5 @@ def test_runner_quarantines_first_session_then_promotes_pending():
     final = store.snapshot("cohort")
     profile = final.profiles["id:a"]
     assert len(profile.anchors) == 1
-    assert len(profile.pending) == 1
+    assert len(profile.pending) == 0
     assert len(profile.confirmed) == 1

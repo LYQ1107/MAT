@@ -113,3 +113,32 @@ assets:
     max_bytes: 5368709120
     phase: P1
     download_url_verified: true
+  # Official MegaDescriptor-T-224 model files.  Revision is pinned to the
+  # immutable Hugging Face commit; provider does not publish a SHA-256 in the
+  # metadata API, so the isolated downloader records and verifies local
+  # SHA-256/byte counts in its receipts.  Redirect hosts were audited with
+  # HEAD before adding them here.
+  - asset_id: megadescriptor_t224_config
+    url: https://huggingface.co/BVRA/MegaDescriptor-T-224/resolve/3ea58ff6c6195bc748bb86c111ff40c32bdddcba/config.json
+    role: official MegaDescriptor-T-224 architecture and preprocessing config
+    license: MIT
+    expected_bytes: 609
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: huggingface:BVRA/MegaDescriptor-T-224@3ea58ff6c6195bc748bb86c111ff40c32bdddcba
+    allowed_hosts: [huggingface.co, us.aws.cdn.hf.co, cdn-lfs.huggingface.co, cas-bridge.xethub.hf.co]
+    max_bytes: 1048576
+    phase: P1
+    download_url_verified: true
+  - asset_id: megadescriptor_t224_weights
+    url: https://huggingface.co/BVRA/MegaDescriptor-T-224/resolve/3ea58ff6c6195bc748bb86c111ff40c32bdddcba/pytorch_model.bin
+    role: official MegaDescriptor-T-224 backbone weights
+    license: MIT
+    expected_bytes: 204267588
+    provider_checksum: null
+    checksum_algorithm: null
+    source_revision: huggingface:BVRA/MegaDescriptor-T-224@3ea58ff6c6195bc748bb86c111ff40c32bdddcba
+    allowed_hosts: [huggingface.co, us.aws.cdn.hf.co, cdn-lfs.huggingface.co, cas-bridge.xethub.hf.co]
+    max_bytes: 268435456
+    phase: P1
+    download_url_verified: true

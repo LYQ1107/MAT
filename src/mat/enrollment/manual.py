@@ -8,6 +8,7 @@ import json
 from mat.core.errors import ProtocolError, ValidationError
 from mat.core.types import PersistentIdentity
 from .base import EnrollmentResult, ReferenceVerification
+from .pooling import pool_identity_descriptors
 
 
 class ManualRegistrar:
@@ -50,7 +51,9 @@ class ManualRegistrar:
                                                  {"protocol": "H_human" if verification.provenance == "human" else "H_oracle_reference",
                                                   "group_label": str(name), "operation_count": verification.operation_count,
                                                   "actual_human_seconds": verification.actual_human_seconds}))
-            out_desc[uid] = descriptors[refs[0]]
+            # H-oracle/H-human uses all explicitly verified references; the
+            # first crop is not allowed to become an accidental anchor.
+            out_desc[uid] = pool_identity_descriptors([descriptors[ref] for ref in refs])
         unresolved = tuple(sorted(allowed - consumed - set(verification.uncertain_tracklets)))
         unresolved += tuple(sorted(set(verification.uncertain_tracklets) & allowed))
         coverage = len(consumed) / len(allowed) if allowed else 0.0

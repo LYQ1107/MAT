@@ -82,10 +82,11 @@ def load_catalog(path: str | None) -> AssetCatalog:
 def _network_policy(mode: str):
     """Build the explicitly selected network policy without exposing secrets."""
     if mode == "authorized-proxy":
-        # The current user authorization is scoped to the official SLEAP object
-        # host.  This prevents accidentally sending legacy Rat/Pig/Cow assets
-        # through the proxy in the same invocation.
-        return AuthorizedProxyPolicy(allowed_hosts=frozenset({"storage.googleapis.com"}))
+        # Host scope comes from each catalog AssetSpec and is enforced by the
+        # downloader.  Keeping this policy unbound avoids a hidden global host
+        # exception when the user explicitly authorizes a different official
+        # provider (for example Hugging Face model assets).
+        return AuthorizedProxyPolicy()
     if mode == "direct-only":
         return DirectOnlyPolicy()
     raise ValueError(f"unknown network mode: {mode}")
@@ -278,10 +279,12 @@ def _asset_hashes(work: Path, required: dict[str, Path]) -> dict[str, str | None
     return result
 
 
-def _training_stats(work: Path) -> dict[str, Any]:
-    logs = sorted((work / "runs" / "sleap_gerbils_pose_smoke").rglob("training_log.csv"))
+def _training_stats(work: Path, *, scope: str = "smoke") -> dict[str, Any]:
+    root_name = "sleap_gerbils_pose_full" if scope == "full" else "sleap_gerbils_pose_smoke"
+    logs = sorted((work / "runs" / root_name).rglob("training_log.csv"))
     if not logs:
-        return {"actual_epochs": None, "optimizer_steps": None, "training_log": None}
+        return {"actual_epochs": None, "optimizer_steps": None, "global_step": None,
+                "training_log": None, "training_scope": scope}
     path = logs[-1]
     try:
         with path.open(newline="", encoding="utf-8") as stream:
@@ -290,24 +293,40 @@ def _training_stats(work: Path) -> dict[str, Any]:
         # SLEAP's CSV records one optimizer step per row for this smoke config;
         # retain the explicit checkpoint step below when it is available.
         steps = None
-        checkpoints = sorted(path.parent.parent.rglob("*.ckpt"))
+        checkpoints = sorted((work / "runs" / root_name).rglob("*.ckpt"))
         if checkpoints:
-            try:
-                import zipfile
-                with zipfile.ZipFile(checkpoints[-1]) as archive:
-                    text = archive.read("metadata.json").decode("utf-8", errors="replace")
-                    metadata = json.loads(text)
-                    steps = metadata.get("global_step")
-            except Exception:
-                pass
-        if steps is None and rows:
+            metadata = _checkpoint_training_metadata(work, checkpoints[-1])
+            steps = metadata.get("global_step")
+        if steps is None and rows and scope == "smoke":
             # The configured smoke run intentionally uses one optimizer step
             # per epoch; this fallback remains tied to the observed CSV rows,
             # rather than inventing a training count for an absent log.
             steps = epochs
-        return {"actual_epochs": epochs, "optimizer_steps": steps, "training_log": str(path)}
+        return {"actual_epochs": epochs, "optimizer_steps": steps, "global_step": steps,
+                "training_log": str(path), "training_scope": scope}
     except (OSError, csv.Error):
-        return {"actual_epochs": None, "optimizer_steps": None, "training_log": str(path)}
+        return {"actual_epochs": None, "optimizer_steps": None, "global_step": None,
+                "training_log": str(path), "training_scope": scope}
+
+
+def _checkpoint_training_metadata(work: Path, checkpoint: Path) -> dict[str, Any]:
+    """Read Lightning epoch/global_step through the isolated SLEAP runtime."""
+    executable = work / "env" / "sleap_site" / "bin" / "sleap-nn"
+    if not executable.is_file() or not checkpoint.is_file():
+        return {}
+    script = (
+        "import json,sys,torch; x=torch.load(sys.argv[1],map_location='cpu'); "
+        "print(json.dumps({'epoch':x.get('epoch'),'global_step':x.get('global_step')}))"
+    )
+    try:
+        result = subprocess.run([_executable_python(str(executable)), "-c", script, str(checkpoint)],
+                                env=_sleap_runtime_env(work), capture_output=True, text=True,
+                                timeout=180, check=False)
+        if result.returncode == 0:
+            return json.loads(result.stdout.strip().splitlines()[-1])
+    except Exception:
+        pass
+    return {}
 
 
 def _executable_python(executable: str) -> str:
@@ -324,125 +343,419 @@ def _executable_python(executable: str) -> str:
     return sys.executable
 
 
+def _identity_runtime_python(work: Path) -> str | None:
+    """Find a local interpreter that can load the offline torch+timm stack.
+
+    The audit/control interpreter intentionally stays lightweight and has no
+    PyTorch.  Identity inference is therefore dispatched to an already
+    installed local runtime (never installed or downloaded implicitly).  The
+    probe is import-only and does not touch the network.
+    """
+    candidates = [
+        work / "env" / "identity_site" / "bin" / "python",
+        Path("/home/lwr/anaconda3/envs/BoT-SORT/bin/python"),
+        Path("/home/lwr/anaconda3/envs/Deepseek/bin/python"),
+    ]
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-c", "import torch, timm"],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+        except OSError:
+            continue
+        if probe.returncode == 0:
+            return str(candidate)
+    return None
+
+
+def _dispatch_identity_runtime(args, work: Path) -> int | None:
+    """Run the identity command in a local torch+timm runtime when needed.
+
+    Returns the child status when dispatch occurred, otherwise ``None``.  An
+    environment marker prevents recursion if the selected runtime is also
+    missing a dependency; in that case the normal, explicit blocker is
+    emitted by ``GlobalIdentityBackend.from_local``.
+    """
+    if os.environ.get("MAT_IDENTITY_RUNTIME_DISPATCHED") == "1":
+        return None
+    try:
+        import torch  # noqa: F401
+        import timm  # noqa: F401
+        return None
+    except Exception:
+        pass
+    executable = _identity_runtime_python(work)
+    if executable is None:
+        return None
+    command = [executable, "-m", "mat.cli", "experiment", str(args.experiment)]
+    if getattr(args, "config", None):
+        command.extend(["--config", str(args.config)])
+    if getattr(args, "identity_checkpoint", None):
+        command.extend(["--identity-checkpoint", str(args.identity_checkpoint)])
+    command.extend(["--work-root", str(work)])
+    env = dict(os.environ)
+    env["MAT_IDENTITY_RUNTIME_DISPATCHED"] = "1"
+    source_root = str(ROOT / "src")
+    env["PYTHONPATH"] = source_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    result = subprocess.run(command, cwd=str(ROOT), env=env, check=False)
+    return int(result.returncode)
+
+
+def _checkpoint_under(path: Path, root: Path) -> bool:
+    """Return true only when ``path`` is physically inside ``root``."""
+    try:
+        path.resolve().relative_to(root.expanduser().resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def resolve_smoke_checkpoint(work: Path, explicit: str | Path | None = None) -> Path | None:
+    """Resolve a smoke checkpoint without consulting the formal-run tree."""
+    if explicit is not None:
+        candidate = Path(explicit).expanduser().resolve()
+        return candidate if candidate.is_file() else None
+    root = work.expanduser().resolve() / "runs" / "sleap_gerbils_pose_smoke"
+    candidates = sorted(path for path in root.rglob("best.ckpt") if path.is_file()) if root.is_dir() else []
+    return candidates[0] if candidates else None
+
+
+def resolve_full_checkpoint(work: Path, explicit: str | Path | None = None) -> Path | None:
+    """Resolve only a ``best.ckpt`` below the dedicated full-run directory.
+
+    In particular, this function deliberately returns ``None`` for a smoke
+    checkpoint or for an arbitrary checkpoint outside the full tree.  A caller
+    can therefore surface ``BLOCKED_MISSING_FULL_POSE_CHECKPOINT`` instead of
+    silently evaluating a two-step smoke model.
+    """
+    root = work.expanduser().resolve() / "runs" / "sleap_gerbils_pose_full"
+    if explicit is not None:
+        candidate = Path(explicit).expanduser().resolve()
+        if (candidate.is_file() and candidate.name.lower() == "best.ckpt"
+                and _checkpoint_under(candidate, root)):
+            return candidate
+        return None
+    candidates = sorted(path for path in root.rglob("best.ckpt") if path.is_file()) if root.is_dir() else []
+    return candidates[0] if candidates else None
+
+
+def _gpu_snapshot() -> list[dict[str, Any]]:
+    """Read a compact GPU snapshot without changing or terminating processes."""
+    if not shutil.which("nvidia-smi"):
+        return []
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name,memory.total,memory.used,utilization.gpu",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except Exception:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        fields = [item.strip() for item in line.split(",")]
+        if len(fields) < 5:
+            continue
+        try:
+            rows.append({"index": int(fields[0]), "name": fields[1],
+                         "memory_total_mib": int(float(fields[2])),
+                         "memory_used_mib": int(float(fields[3])),
+                         "utilization_gpu_percent": float(fields[4])})
+        except ValueError:
+            continue
+    return rows
+
+
+def _gpu_busy(rows: list[dict[str, Any]], gpu_index: int | None = None) -> bool:
+    """Conservatively classify a GPU as busy from the read-only snapshot."""
+    selected = [row for row in rows if gpu_index is None or row.get("index") == gpu_index]
+    if not selected:
+        return True
+    # A few MiB of display/runtime reservation is harmless; sustained memory
+    # or utilization above these small thresholds means another job owns it.
+    return all(float(row.get("memory_used_mib", 0)) > 256
+               or float(row.get("utilization_gpu_percent", 0)) > 5
+               for row in selected)
+
+
+def _choose_free_gpu(rows: list[dict[str, Any]]) -> int | None:
+    """Choose the lowest-index GPU with no material competing allocation."""
+    for row in sorted(rows, key=lambda value: int(value.get("index", 10**9))):
+        if not _gpu_busy([row], int(row["index"])):
+            return int(row["index"])
+    return None
+
+
+def _count_slp_instances(path: Path, backend: SleapNNBackend, env: dict[str, str]) -> dict[str, Any]:
+    """Count public SLEAP prediction instances in a child runtime."""
+    script = (
+        "import json,sys; from sleap_io import load_slp; "
+        "p=sys.argv[1]; labels=load_slp(p, open_videos=False, lazy=True); "
+        "print(json.dumps({'labeled_frames':len(labels.labeled_frames),"
+        "'instances':sum(len(f.instances) for f in labels.labeled_frames)})); labels.close()"
+    )
+    try:
+        result = subprocess.run([_executable_python(backend.executable), "-c", script, str(path)],
+                                env=env, capture_output=True, text=True, timeout=120, check=False)
+        if result.returncode != 0:
+            return {"status": "COUNT_FAILED", "error": result.stderr[-1000:]}
+        return {"status": "COUNTED", **json.loads(result.stdout.strip().splitlines()[-1])}
+    except Exception as exc:
+        return {"status": "COUNT_FAILED", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _write_full_training_plan(full_root: Path, config_path: Path, train_slp: Path,
+                              val_slp: Path, max_epochs: int) -> None:
+    """Persist the exact formal command without launching it."""
+    command = [
+        "sleap-nn", "train", str(config_path),
+        f"data_config.train_labels_path=[{train_slp}]",
+        f"data_config.val_labels_path=[{val_slp}]",
+        f"trainer_config.max_epochs={int(max_epochs)}",
+        "trainer_config.save_ckpt=true",
+        f"trainer_config.ckpt_dir={full_root / 'models'}",
+        "trainer_config.use_wandb=false",
+    ]
+    _write_json(full_root / "planned_command.json", {
+        "schema_version": "mat.sleap_nn.full_plan.v1",
+        "command": command,
+        "max_epochs": int(max_epochs),
+        "train_steps_per_epoch": None,
+        "smoke_checkpoint_reference": None,
+    })
+
+
 def baseline_sleap_gerbils(args) -> int:
-    """Run real SLEAP baseline stages and persist a run manifest."""
+    """Run the auditable SLEAP pose chain with isolated smoke/full trees."""
     work = _work_root(args.work_root)
+    # Keep the callable usable from older programmatic callers that supplied
+    # only the pre-v2 Namespace fields; the CLI parser still provides all of
+    # these explicitly.
+    device = getattr(args, "device", "auto")
+    gpu_index = getattr(args, "gpu_index", None)
+    smoke_epochs = int(getattr(args, "smoke_epochs", 2))
+    full_epochs = int(getattr(args, "full_epochs", 50))
+    resume_checkpoint = getattr(args, "resume_checkpoint", None)
+    checkpoint_arg = getattr(args, "checkpoint", None)
+    executable_arg = getattr(args, "executable", None)
+    clip_frames = getattr(args, "clip_frames", "0-2559")
     raw = work / "datasets" / "sleap_gerbils"
     run_dir = Path(args.run_dir) if args.run_dir else work / "runs" / "sleap_gerbils_baseline"
     run_dir.mkdir(parents=True, exist_ok=True)
-    stage = args.stage
+    requested_stage = args.stage
+    stage_aliases = {"smoke": "train-smoke", "predict": "test-full", "eval": "test-full",
+                     "clip": "clip-full", "all": "all-full"}
+    stage = stage_aliases.get(requested_stage, requested_stage)
     started_at = datetime.now(timezone.utc).isoformat()
+    full_root = work / "runs" / "sleap_gerbils_pose_full"
+    smoke_root = work / "runs" / "sleap_gerbils_pose_smoke"
     manifest: dict[str, Any] = {
-        "schema_version": "mat.sleap_gerbils.run.v1", "status": "RUNNING",
-        "stage": stage, "run_dir": str(run_dir),
+        "schema_version": "mat.sleap_gerbils.run.v2", "status": "RUNNING",
+        "stage": stage, "requested_stage": requested_stage, "run_dir": str(run_dir),
         "command": "mat baseline sleap-gerbils", "argv": [str(value) for value in sys.argv],
         "started_at": started_at, "start_time": started_at,
-        "hostname": platform.node(), "device": args.device, "seed": args.seed,
-        "GPU": {"requested": args.device, "visible_devices": "" if args.device == "cpu" else os.environ.get("CUDA_VISIBLE_DEVICES"), "used": args.device != "cpu"},
-        "clip_frames": args.clip_frames, **_git_state(), "dataset_root": str(raw),
+        "hostname": platform.node(), "device": device, "gpu_index": gpu_index,
+        "seed": args.seed,
+        "GPU": {"requested": device, "gpu_index": gpu_index,
+                "visible_devices": str(gpu_index) if gpu_index is not None else None,
+                "used": device != "cpu"},
+        "clip_frames": clip_frames, **_git_state(), "dataset_root": str(raw),
         "blockers": [], "metrics": {}, "sleap_io_version": None,
         "sleap_nn_version": None, "torch_version": None,
         "identity_model_hash": None, "pose_checkpoint_hash": None,
         "gallery_start_version": None, "gallery_end_version": None,
-        "gallery_versions": [],
+        "gallery_versions": [], "smoke_checkpoint": None, "full_checkpoint": None,
     }
     if not raw.is_dir():
         manifest.update({"status": "BLOCKED_MISSING_ASSET", "blockers": ["missing official SLEAP gerbil directory"]})
-        _write_json(run_dir / "run_manifest.json", manifest); print(json.dumps(manifest, ensure_ascii=False, indent=2)); return 2
-    required = {
-        "train": raw / "train.pkg.slp", "val": raw / "val.pkg.slp",
-        "test": raw / "test.pkg.slp", "clip": raw / "example_5min.mp4",
-        "tracking": raw / "example_tracking.slp",
-    }
+        _write_json(run_dir / "run_manifest.json", manifest)
+        print(json.dumps(manifest, ensure_ascii=False, indent=2)); return 2
+    required = {"train": raw / "train.pkg.slp", "val": raw / "val.pkg.slp",
+                "test": raw / "test.pkg.slp", "clip": raw / "example_5min.mp4",
+                "tracking": raw / "example_tracking.slp"}
     missing = [f"{name}:{path}" for name, path in required.items() if not path.is_file()]
     if missing:
         manifest.update({"status": "BLOCKED_MISSING_ASSET", "blockers": missing})
-        _write_json(run_dir / "run_manifest.json", manifest); print(json.dumps(manifest, ensure_ascii=False, indent=2)); return 2
+        _write_json(run_dir / "run_manifest.json", manifest)
+        print(json.dumps(manifest, ensure_ascii=False, indent=2)); return 2
     manifest["dataset_sha256"] = _asset_hashes(work, required)
     split_hash_input = {name: manifest["dataset_sha256"].get(name) for name in ("train", "val", "test")}
-    manifest["split_sha256"] = hashlib.sha256(
-        json.dumps(split_hash_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    if stage in {"inspect", "prepare", "all"}:
-        inventory = SleapGerbilsAdapter().inspect(raw)
-        manifest["inventory"] = asdict(inventory)
-        if stage in {"prepare", "all"}:
+    manifest["split_sha256"] = hashlib.sha256(json.dumps(split_hash_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    if stage in {"inspect", "prepare", "all-full"}:
+        manifest["inventory"] = asdict(SleapGerbilsAdapter().inspect(raw))
+        if stage in {"prepare", "all-full"}:
             observations = work / "prepared" / "sleap_gerbils" / "manifests" / "observations.jsonl"
             if not observations.is_file():
                 bundle = SleapGerbilsAdapter().build_manifests(raw, work / "prepared" / "sleap_gerbils")
                 manifest["prepared"] = {"observations": str(bundle.observations), "truth": str(bundle.private_eval_truth)}
             else:
                 manifest["prepared"] = {"observations": str(observations), "status": "EXISTING_NOT_REBUILT"}
-    if stage in {"runtime", "smoke", "predict", "eval", "clip", "all"}:
+
+    needs_runtime = stage in {"runtime", "train-smoke", "train-full", "test-full", "clip-full", "all-full"}
+    backend = None
+    env: dict[str, str] | None = None
+    if needs_runtime:
         env = _sleap_runtime_env(work)
-        if args.device == "cpu":
+        # These changes are confined to the SLEAP child process.  The Codex
+        # control process and its ambient proxy/GPU environment are untouched.
+        if device == "cpu":
             env["CUDA_VISIBLE_DEVICES"] = ""
-        backend = SleapNNBackend(executable=args.executable or str(work / "env" / "sleap_site" / "bin" / "sleap-nn"), device=args.device, env=env)
-        if stage in {"runtime", "all"}:
+        elif gpu_index is not None:
+            env["CUDA_VISIBLE_DEVICES"] = str(gpu_index)
+        backend = SleapNNBackend(
+            executable=executable_arg or str(work / "env" / "sleap_site" / "bin" / "sleap-nn"),
+            device=device, env=env,
+        )
+        if stage in {"runtime", "all-full"}:
             manifest["runtime"] = backend.verify_runtime()
-            version = manifest["runtime"].get("version", {}).get("stdout_first_line")
-            manifest["sleap_nn_version"] = version
+            manifest["sleap_nn_version"] = manifest["runtime"].get("version", {}).get("stdout_first_line")
             try:
-                torch_probe = subprocess.run(
-                    [_executable_python(backend.executable), "-c", "import torch; print(torch.__version__)"],
-                    env=env, capture_output=True, text=True, timeout=30, check=False,
-                )
-                manifest["torch_version"] = torch_probe.stdout.strip() or None
+                probe = subprocess.run([_executable_python(backend.executable), "-c", "import torch; print(torch.__version__)"],
+                                       env=env, capture_output=True, text=True, timeout=30, check=False)
+                manifest["torch_version"] = probe.stdout.strip() or None
             except Exception:
                 manifest["torch_version"] = None
             try:
-                sleap_io_probe = subprocess.run(
-                    [_executable_python(backend.executable), "-c", "import sleap_io; print(getattr(sleap_io, '__version__', 'unknown'))"],
-                    env=env, capture_output=True, text=True, timeout=30, check=False,
-                )
-                manifest["sleap_io_version"] = sleap_io_probe.stdout.strip() or None
+                probe = subprocess.run([_executable_python(backend.executable), "-c", "import sleap_io; print(getattr(sleap_io, '__version__', 'unknown'))"],
+                                       env=env, capture_output=True, text=True, timeout=30, check=False)
+                manifest["sleap_io_version"] = probe.stdout.strip() or None
             except Exception:
                 manifest["sleap_io_version"] = None
-        config_dir = work / "runs" / "sleap_gerbils_pose_config"
-        config_path = config_dir / "training_config.yaml"
-        checkpoint = Path(args.checkpoint).expanduser().resolve() if args.checkpoint else None
-        if stage in {"smoke", "all"}:
-            if checkpoint is None:
-                candidates = sorted((work / "runs" / "sleap_gerbils_pose_smoke").rglob("best.ckpt"))
-                checkpoint = candidates[0] if candidates else None
-            if checkpoint is None:
-                config_dir.mkdir(parents=True, exist_ok=True)
-                generated = backend.generate_config(required["train"], config_dir)
-                config_path = next((path for path in generated if path.name == "training_config.yaml"), generated[0])
-                checkpoint = backend.train(config_path, required["train"], required["val"], work / "runs" / "sleap_gerbils_pose_smoke", args.max_epochs)
-            manifest["pose_checkpoint"] = str(checkpoint)
-        if checkpoint is None and stage != "runtime":
-            manifest["blockers"].append("missing trained SLEAP checkpoint")
+
+    if stage == "train-smoke":
+        assert backend is not None
+        smoke_config_dir = smoke_root / "config"
+        smoke_config = smoke_config_dir / "training_config.yaml"
+        if not smoke_config.is_file():
+            generated = backend.generate_config(required["train"], smoke_config_dir)
+            smoke_config = next((p for p in generated if p.name == "training_config.yaml"), generated[0])
+        checkpoint = resolve_smoke_checkpoint(work, checkpoint_arg)
+        if checkpoint is None:
+            checkpoint = backend.train(smoke_config, required["train"], required["val"], smoke_root,
+                                       smoke_epochs, train_steps_per_epoch=1)
+        manifest["smoke_checkpoint"] = str(checkpoint)
+        manifest["pose_checkpoint"] = str(checkpoint)
+        manifest["pose_checkpoint_sha256"] = _sha256_file(checkpoint)
+        manifest["pose_checkpoint_hash"] = manifest["pose_checkpoint_sha256"]
+        manifest["training_scope"] = "smoke"
+        manifest["training_steps_override"] = 1
+
+    if stage in {"train-full", "all-full"}:
+        assert backend is not None and env is not None
+        full_root.mkdir(parents=True, exist_ok=True)
+        full_config = full_root / "training_config.yaml"
+        if not full_config.is_file():
+            generated = backend.generate_config(required["train"], full_root)
+            generated_config = next((p for p in generated if p.name == "training_config.yaml"), generated[0])
+            # Keep the generated file as the starting point, then enforce the
+            # formal-run invariants below even when a previous interrupted run
+            # left a config behind.
+            if generated_config != full_config:
+                full_config.write_text(generated_config.read_text(encoding="utf-8"), encoding="utf-8")
+        import yaml
+        raw_config = yaml.safe_load(full_config.read_text(encoding="utf-8")) or {}
+        trainer = raw_config.setdefault("trainer_config", {})
+        trainer["max_epochs"] = full_epochs
+        trainer.pop("train_steps_per_epoch", None)
+        trainer["resume_ckpt_path"] = None
+        full_config.write_text(yaml.safe_dump(raw_config, sort_keys=False), encoding="utf-8")
+        _write_full_training_plan(full_root, full_config, required["train"], required["val"], full_epochs)
+        manifest["full_training_plan"] = str(full_root / "planned_command.json")
+        manifest["training_scope"] = "full"
+        manifest["full_epochs_requested"] = full_epochs
+        manifest["training_steps_override"] = None
+        gpu_rows = _gpu_snapshot()
+        manifest["gpu_snapshot_before_full"] = gpu_rows
+        if device == "cpu":
+            manifest["blockers"].append("formal full training is GPU-only; CPU 50-epoch execution is not authorized")
+            manifest["status"] = "BLOCKED_GPU_BUSY"
+        elif _gpu_busy(gpu_rows, gpu_index):
+            manifest["blockers"].append("all requested GPUs are busy or unavailable; no competing process was touched")
+            manifest["status"] = "BLOCKED_GPU_BUSY"
         else:
+            selected_gpu = gpu_index if gpu_index is not None else _choose_free_gpu(gpu_rows)
+            if selected_gpu is None:
+                manifest["blockers"].append("all requested GPUs are busy or unavailable; no competing process was touched")
+                manifest["status"] = "BLOCKED_GPU_BUSY"
+                selected_gpu = None
+            else:
+                # Scope GPU visibility to the SLEAP child only, including the
+                # automatically selected free device.
+                env["CUDA_VISIBLE_DEVICES"] = str(selected_gpu)
+                backend.env = env
+                manifest["gpu_index"] = selected_gpu
+                manifest["GPU"]["gpu_index"] = selected_gpu
+                manifest["GPU"]["visible_devices"] = str(selected_gpu)
+            resume = Path(resume_checkpoint).expanduser().resolve() if resume_checkpoint else None
+        if manifest.get("status") != "BLOCKED_GPU_BUSY":
+            checkpoint = backend.train(full_config, required["train"], required["val"], full_root,
+                                       full_epochs, resume_checkpoint=resume)
+            manifest["full_checkpoint"] = str(checkpoint)
             manifest["pose_checkpoint"] = str(checkpoint)
-            if checkpoint.is_file():
-                manifest["pose_checkpoint_sha256"] = _sha256_file(checkpoint)
-                manifest["pose_checkpoint_hash"] = manifest["pose_checkpoint_sha256"]
-            if stage in {"predict", "eval", "all"}:
-                prediction = run_dir / "test_predictions.slp"
-                if not prediction.is_file():
-                    backend.predict(required["test"], checkpoint, prediction, only_labeled_frames=True)
-                manifest["test_prediction"] = str(prediction)
-                if stage in {"eval", "all"}:
+            manifest["pose_checkpoint_sha256"] = _sha256_file(checkpoint)
+            manifest["pose_checkpoint_hash"] = manifest["pose_checkpoint_sha256"]
+
+    if stage in {"test-full", "clip-full", "all-full"}:
+        assert backend is not None and env is not None
+        checkpoint = resolve_full_checkpoint(work, checkpoint_arg)
+        if checkpoint is None:
+            manifest["blockers"].append("BLOCKED_MISSING_FULL_POSE_CHECKPOINT")
+        else:
+            manifest["full_checkpoint"] = str(checkpoint)
+            manifest["pose_checkpoint"] = str(checkpoint)
+            manifest["pose_checkpoint_sha256"] = _sha256_file(checkpoint)
+            manifest["pose_checkpoint_hash"] = manifest["pose_checkpoint_sha256"]
+            if stage in {"test-full", "all-full"}:
+                validation_dir = full_root / "validation"
+                validation_dir.mkdir(parents=True, exist_ok=True)
+                threshold_results = []
+                selected_threshold = None
+                for threshold in (0.10, 0.15, 0.20, 0.25):
+                    val_prediction = validation_dir / f"predictions_t{threshold:.2f}.slp"
+                    if not val_prediction.is_file():
+                        backend.predict(required["val"], checkpoint, val_prediction, only_labeled_frames=True,
+                                        peak_threshold=threshold)
+                    count = _count_slp_instances(val_prediction, backend, env)
+                    threshold_results.append({"threshold": threshold, **count})
+                    if count.get("status") == "COUNTED" and int(count.get("instances", 0)) > 0:
+                        selected_threshold = threshold
+                        break
+                manifest["validation_prediction_thresholds"] = threshold_results
+                if selected_threshold is None:
+                    manifest["blockers"].append("formal_validation_has_no_predicted_instances")
+                else:
+                    prediction = run_dir / "test_predictions.slp"
+                    if not prediction.is_file():
+                        backend.predict(required["test"], checkpoint, prediction, only_labeled_frames=True,
+                                        peak_threshold=selected_threshold)
+                    manifest["test_prediction"] = str(prediction)
+                    manifest["test_prediction_count"] = _count_slp_instances(prediction, backend, env)
                     manifest["test_eval"] = backend.evaluate(required["test"], prediction, run_dir / "eval")
-            if stage in {"clip", "all"}:
+                    if manifest["test_prediction_count"].get("instances", 0) == 0:
+                        manifest["blockers"].append("formal_test_has_no_predicted_instances")
+            if stage in {"clip-full", "all-full"}:
                 clip_prediction = run_dir / "example_5min.predictions.slp"
                 if not clip_prediction.is_file():
-                    backend.predict(required["clip"], checkpoint, clip_prediction, tracking=True, frames=args.clip_frames)
+                    backend.predict(required["clip"], checkpoint, clip_prediction, tracking=True, frames=clip_frames)
                 manifest["clip_prediction"] = str(clip_prediction)
-    manifest.update(_training_stats(work))
-    manifest.setdefault("identity_model_sha256", None)
-    manifest["identity_model_hash"] = manifest.get("identity_model_sha256")
-    manifest.setdefault("gallery_versions", [])
-    # A successful upstream process is not the same as a measured baseline:
-    # zero predicted instances and a frame-prefix clip are explicit partial
-    # evaluation states, never silently promoted to metrics.
-    if manifest.get("test_eval", {}).get("status") == "SUCCEEDED_NO_PREDICTIONS":
-        manifest["blockers"].append("pose_evaluation_has_no_predicted_instances")
-    if stage in {"clip", "all"} and args.clip_frames.strip() != "0-2559":
-        manifest["blockers"].append("clip_tracking_is_prefix_smoke_only")
+                manifest["clip_prediction_count"] = _count_slp_instances(clip_prediction, backend, env)
+
+    # Never infer a full checkpoint from smoke.  Training statistics are kept
+    # separately so the old two-step run cannot masquerade as formal training.
+    if stage == "train-smoke":
+        smoke_stats = _training_stats(work, scope="smoke")
+        manifest.update(smoke_stats)
+    elif stage in {"train-full", "all-full"}:
+        manifest.update(_training_stats(work, scope="full"))
+    if manifest.get("status") == "RUNNING":
+        manifest["status"] = "SUCCEEDED" if not manifest["blockers"] else "BLOCKED"
     manifest["blockers"] = sorted(set(manifest["blockers"]))
-    manifest["status"] = "SUCCEEDED" if not manifest["blockers"] else "PARTIALLY_EVALUATED"
+    if manifest["blockers"] and manifest["status"] == "SUCCEEDED":
+        manifest["status"] = "BLOCKED"
     manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
     manifest["end_time"] = manifest["finished_at"]
     _write_json(run_dir / "run_manifest.json", manifest)
@@ -451,10 +764,10 @@ def baseline_sleap_gerbils(args) -> int:
 
 
 def experiment_identity(args) -> int:
-    """Start a B0/B1/B2/O1 run only with verified identity inputs."""
+    """Dispatch the file-backed B0 runner after a measured full pose run."""
     work = _work_root(args.work_root)
     default_configs = {
-        "b0": ROOT / "configs" / "experiments" / "gerbils" / "B0_global_static.yaml",
+        "b0": ROOT / "configs" / "experiments" / "gerbils" / "B0_oracle_crop_diagnostic.yaml",
         "b1": ROOT / "configs" / "experiments" / "gerbils" / "B1_part_static.yaml",
         "b2": ROOT / "configs" / "experiments" / "gerbils" / "B2_learned_matcher.yaml",
         "o1": ROOT / "configs" / "experiments" / "gerbils" / "O1_safe_memory.yaml",
@@ -463,7 +776,9 @@ def experiment_identity(args) -> int:
     run_dir = work / "runs" / f"{args.experiment}_gerbils"
     run_dir.mkdir(parents=True, exist_ok=True)
     started_at = datetime.now(timezone.utc).isoformat()
-    checkpoint = Path(args.identity_checkpoint).expanduser().resolve() if args.identity_checkpoint else None
+    checkpoint = (Path(args.identity_checkpoint).expanduser().resolve() if args.identity_checkpoint else
+                  work / "assets" / "identity" / "megadescriptor_t_224" / "pytorch_model.bin")
+    pose_checkpoint = resolve_full_checkpoint(work)
     result: dict[str, Any] = {"schema_version": "mat.identity_experiment.v1", "experiment": args.experiment, "config": str(config),
                               "command": "mat experiment " + args.experiment, "argv": [str(value) for value in sys.argv], "start_time": started_at,
                               "end_time": None, "hostname": platform.node(), "GPU": None,
@@ -471,24 +786,77 @@ def experiment_identity(args) -> int:
                               "sleap_io_version": None, "sleap_nn_version": None, "torch_version": None,
                               "identity_model_hash": None, "pose_checkpoint_hash": None,
                               "gallery_start_version": None, "gallery_end_version": None,
-                              "status": "BLOCKED_MISSING_IDENTITY_ASSET", "optimizer_steps": None,
-                              "checkpoint": str(checkpoint) if checkpoint else None, "metrics": None, "blockers": []}
+                              "status": "RUNNING", "optimizer_steps": None,
+                              "checkpoint": str(checkpoint) if checkpoint else None,
+                              "pose_checkpoint": str(pose_checkpoint) if pose_checkpoint else None,
+                              "metrics": None, "blockers": []}
     if not config.is_file():
         result["status"] = "BLOCKED_MISSING_CONFIG"; result["blockers"].append(str(config))
-    elif checkpoint is None or not checkpoint.is_file():
-        result["blockers"].append("verified MegaDescriptor-T-224 checkpoint/config not supplied")
+    elif args.experiment != "b0":
+        # B1/B2/O1 are intentionally not represented by a fake asset blocker;
+        # they can only be promoted after a measured B0 result and currently
+        # have no implemented file-backed runner.
+        raise NotImplementedError(f"{args.experiment.upper()} file-backed runner is not implemented")
+    elif pose_checkpoint is None:
+        result["status"] = "BLOCKED_MISSING_FULL_POSE_CHECKPOINT"
+        result["blockers"].append("full pose best.ckpt is required; smoke checkpoints are never accepted")
+    elif not checkpoint.is_file():
+        result["status"] = "BLOCKED_MISSING_IDENTITY_ASSET"
+        result["blockers"].append("verified local MegaDescriptor-T-224 checkpoint/config is absent")
     else:
+        baseline_manifest = work / "runs" / "sleap_gerbils_baseline" / "run_manifest.json"
+        pose_manifest = json.loads(baseline_manifest.read_text(encoding="utf-8")) if baseline_manifest.is_file() else {}
+        result["dataset_sha256"] = pose_manifest.get("dataset_sha256")
+        result["split_sha256"] = pose_manifest.get("split_sha256")
+        result["pose_checkpoint_hash"] = _sha256_file(pose_checkpoint)
+        test_eval = pose_manifest.get("test_eval", {})
+        test_count = pose_manifest.get("test_prediction_count", {}).get("instances", 0)
+        if test_eval.get("status") != "SUCCEEDED" or int(test_count or 0) <= 0:
+            result["status"] = "BLOCKED_POSE_TEST_NOT_SUCCEEDED"
+            result["blockers"].append("full pose validation/test must have non-zero predictions and official metrics before B0")
+            result["pose_test_status"] = test_eval.get("status")
+        if result["status"] == "RUNNING":
+            dispatched = _dispatch_identity_runtime(args, work)
+            if dispatched is not None:
+                # The local torch+timm runtime owns the child manifest and
+                # result files; propagate its status without duplicating them
+                # in the lightweight parent interpreter.
+                return dispatched
         from mat.backends.wildlife import GlobalIdentityBackend
         model_config = checkpoint.with_name("config.json")
-        try:
-            GlobalIdentityBackend.from_local(checkpoint, config_path=model_config)
-        except Exception as exc:
-            result["status"] = "BLOCKED_IDENTITY_ASSET_VALIDATION"; result["blockers"].append(f"{type(exc).__name__}: {exc}")
-        else:
-            result["status"] = "NOT_RUN_MISSING_S0_INPUT"; result["blockers"].append("file-backed S0/query crop runner and verified identity mapping are not available")
+        if result["status"] == "RUNNING":
+            try:
+                encoder = GlobalIdentityBackend.from_local(checkpoint, config_path=model_config)
+                from mat.experiments.gerbil_identity import (load_prepared_gerbil_samples,
+                    load_private_gerbil_truth, load_session_inventory,
+                    run_b0_oracle_crop_diagnostic)
+                samples, _ = load_prepared_gerbil_samples(work)
+                truth = load_private_gerbil_truth(work)
+                sessions = load_session_inventory(work)
+                gallery_path = run_dir / "gallery.sqlite"
+                gallery = __import__("mat.identity.gallery", fromlist=["GalleryStore"]).GalleryStore(gallery_path)
+                b0 = run_b0_oracle_crop_diagnostic(samples, truth, encoder, gallery, sessions,
+                                                   cohort_uid="gerbils-b0-oracle")
+                b0.write(run_dir / "b0_result.json")
+                gallery.close()
+                result["status"] = b0.status
+                result["metrics"] = b0.metrics
+                result["s0_sessions"] = list(b0.s0_sessions)
+                result["anchor_counts"] = b0.anchor_counts
+                result["gallery_start_version"] = b0.gallery_version
+                result["gallery_end_version"] = b0.gallery_version
+                if b0.blocker:
+                    result["blockers"].append(b0.blocker)
+            except Exception as exc:
+                result["status"] = "BLOCKED_IDENTITY_RUNTIME"
+                result["blockers"].append(f"{type(exc).__name__}: {exc}")
+        result["identity_model_hash"] = _sha256_file(checkpoint)
     result["end_time"] = datetime.now(timezone.utc).isoformat()
+    result["blockers"] = sorted(set(result["blockers"]))
+    if result["status"] == "RUNNING":
+        result["status"] = "SUCCEEDED" if not result["blockers"] else "BLOCKED"
     _write_json(run_dir / "run_manifest.json", result)
-    print(json.dumps(result, ensure_ascii=False, indent=2)); return 2
+    print(json.dumps(result, ensure_ascii=False, indent=2)); return 0 if result["status"] == "SUCCEEDED" else 2
 
 
 def split_freeze(args) -> int:
@@ -554,15 +922,22 @@ def build_parser() -> argparse.ArgumentParser:
     baseline = sub.add_parser("baseline", help="run a real public-upstream baseline")
     bp = baseline.add_subparsers(dest="baseline_cmd", required=True)
     p = bp.add_parser("sleap-gerbils", help="SLEAP-NN pose baseline on the fixed NYU gerbil dataset")
-    p.add_argument("--stage", choices=["inspect", "prepare", "runtime", "smoke", "predict", "eval", "clip", "all"], default="all")
+    p.add_argument("--stage", choices=["inspect", "prepare", "runtime", "train-smoke", "train-full",
+                                        "test-full", "clip-full", "all-full",
+                                        # Compatibility aliases are mapped to the explicit scopes above.
+                                        "smoke", "predict", "eval", "clip", "all"], default="all-full")
     p.add_argument("--work-root")
     p.add_argument("--run-dir")
     p.add_argument("--executable")
     p.add_argument("--checkpoint")
-    p.add_argument("--device", choices=["cpu", "auto"], default="cpu")
-    p.add_argument("--max-epochs", type=int, default=2)
+    p.add_argument("--device", choices=["cpu", "auto"], default="auto")
+    p.add_argument("--gpu-index", type=int)
+    p.add_argument("--smoke-epochs", type=int, default=2)
+    p.add_argument("--full-epochs", type=int, default=50)
+    p.add_argument("--max-epochs", type=int, help=argparse.SUPPRESS)
+    p.add_argument("--resume-checkpoint")
     p.add_argument("--seed", type=int, default=17)
-    p.add_argument("--clip-frames", default="0-15")
+    p.add_argument("--clip-frames", default="0-2559")
     p.set_defaults(func=baseline_sleap_gerbils)
     experiments = sub.add_parser("experiment", help="record an identity experiment attempt")
     ep = experiments.add_subparsers(dest="experiment", required=True)

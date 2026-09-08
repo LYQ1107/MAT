@@ -178,7 +178,12 @@ class LongitudinalGalleryStore:
             assert item is not None
             profile = profiles[item.exemplar.identity_uid]
             if item.exemplar.role == "confirmed":
-                profiles[item.exemplar.identity_uid] = replace(profile, confirmed=profile.confirmed + (item.exemplar,))
+                # Promotion consumes the quarantine evidence in the new head.
+                # The old snapshot remains immutable/auditable, but a pending
+                # exemplar must not remain in the active profile indefinitely.
+                profiles[item.exemplar.identity_uid] = replace(
+                    profile, confirmed=profile.confirmed + (item.exemplar,), pending=(),
+                )
             elif item.exemplar.role == "pending":
                 profiles[item.exemplar.identity_uid] = replace(profile, pending=profile.pending + (item.exemplar,))
             self._proposals[item.proposal_uid] = replace(item, status="committed")

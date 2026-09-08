@@ -1,6 +1,6 @@
 # MAT 进度（2026-09-08）
 
-当前总状态：`RESEARCH_PIPELINE_READY / PARTIALLY_EVALUATED`。本轮没有占用他人 GPU，没有把预测当 GT，也没有提交数据、权重或凭据。
+当前总状态：`RUNNING / FORMAL_POSE_TRAINING`。代码/配置和小型脱敏报告在研究分支；数据、权重、私有 GT、代理凭据均只在 `MAT_workspace`，没有把预测当 GT，也没有触碰其他作业。
 
 ## 已推送阶段提交
 
@@ -10,15 +10,15 @@
 
 | 阶段 | 状态 | 证据/阻塞 |
 |---|---|---|
-| M0 | `SMOKE_PASSED` | 实际仓库/AGENTS、代理、路由、GPU、上游 commit/API 审计已写入 `doctor.json`、`docs/NETWORK_AUDIT.md`、`locks/upstream.lock.yaml`；所有 A100 忙，透明代理无法完全排除 |
-| M1 | `DOWNLOADED / VERIFIED` | 仅授权 `storage.googleapis.com` 的 SLEAP gerbils 五个对象；其余 Rat/Pig/Cow/权重未下载 |
-| M2 | `SMOKE_PASSED / BLOCKED_MISSING_IDENTITY_ASSET` | SLEAP adapter、匿名 manifest、公开 API schema audit、23-session 冻结划分 (`f1a04319e89f90a6`, seed 17) 和 global-only B0 链就绪；缺 MegaDescriptor-T-224 原件/跨日映射 |
-| M3 | `SMOKE_PASSED / PARTIALLY_EVALUATED` | 官方 SLEAP-NN 0.3.3 2-epoch CPU fit、test predict/eval、连续 clip tracking prefix smoke 已执行；完整 clip 与有实例 pose 指标未完成 |
-| M4 | `IMPLEMENTED / BLOCKED_NEEDS_REFERENCE_REVIEW` | H/A 共用 EnrollmentResult、prototype 修复、end-of-session runner 已实现；无人工 S0 核验 |
-| M5 | `IMPLEMENTED / BLOCKED_MISSING_IDENTITY_ASSET` | ROIAlign part encoder、B1 fusion、EvidenceMatcher、三层 gallery、commit gate 已实现；无核验 identity checkpoint |
+| M0 | `SMOKE_PASSED` | 实际仓库/AGENTS、代理、路由、GPU、上游 commit/API 审计已写入 `doctor.json`、`docs/NETWORK_AUDIT.md`、`locks/upstream.lock.yaml`；透明代理/TUN 仍无法由用户态完全排除 |
+| M1 | `DOWNLOADED / VERIFIED` | SLEAP 五个对象及官方 MegaDescriptor-T-224 config/weights 已在隔离下载子进程中核验；HF commit、bytes、SHA、MIT、redirect origin 写入 `locks/assets.lock.json`/receipts；Rat/Pig/Cow 未下载 |
+| M2 | `SMOKE_PASSED / IMPLEMENTED` | SLEAP adapter、匿名 manifest、公开 API schema audit、23-session 冻结划分 (`f1a04319e89f90a6`, seed 17)、真实文件型 B0 runner 和两份 B0 配置就绪 |
+| M3 | `RUNNING` | smoke 与 full 命令/检查点已隔离；formal 50 epoch 在 GPU 1 运行，已到 epoch 1 / `global_step=400`，尚未完成 test/metrics |
+| M4 | `IMPLEMENTED / BLOCKED_NEEDS_REFERENCE_REVIEW` | H/A 共用 EnrollmentResult、全参考质量池化、end-of-session runner 已实现；尚无人工 H-human 核验 |
+| M5 | `IMPLEMENTED / VERIFIED` | 统一 Mega runtime/preprocess、ROIAlign 部位证据、B1 fusion、EvidenceMatcher、三层 gallery、pending promotion gate 已实现并有测试 |
 | M6 | `NOT_APPLICABLE` | O2/idtracker.ai/idmatcherai/CowIDentifier 缺输入或许可 |
 | M7 | `BLOCKED_NEEDS_POSE_GT / BLOCKED_NEEDS_CROSS_DAY_MAPPING` | 没有连续人工 pose GT 或跨日 biological-ID 映射 |
-| M8 | `SUCCEEDED` | 7 个阶段提交及后续文档收尾均为非 force fast-forward push；每次 push 后均执行 `git rev-parse HEAD` 与 `git ls-remote origin refs/heads/research/longitudinal-mat` 核验（当前值以该命令为准） |
+| M8 | `RUNNING` | 代码和文档变更待正式训练/test/B0 结果后分阶段提交；此前提交均为非 force fast-forward，推送后核对本地/远端 SHA |
 
 ## 已实际执行的 SLEAP 数据链
 
@@ -40,10 +40,11 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 ## 真实运行收据
 
-- 统一入口 `mat baseline sleap-gerbils --stage all --device cpu --clip-frames 0-15` 已复用现有 checkpoint，生成 `MAT_workspace/runs/sleap_gerbils_baseline/run_manifest.json`。manifest 记录 hostname、UTC 起止时间、git 状态、五个数据文件 SHA、split SHA、SLEAP-NN/torch 版本、pose checkpoint SHA、2 epochs/2 optimizer steps、官方 test/eval/clip 输出和 gallery/identity 字段；状态为 `PARTIALLY_EVALUATED`，阻塞为 `pose_evaluation_has_no_predicted_instances` 与 `clip_tracking_is_prefix_smoke_only`。四个 `mat experiment b0|b1|b2|o1` 入口均生成独立 receipt，因缺 verified MegaDescriptor-T-224 checkpoint 保持 `BLOCKED_MISSING_IDENTITY_ASSET`。
+- `mat baseline sleap-gerbils --stage train-full --device auto --gpu-index 1 --full-epochs 50` 已启动；父 PID 13938，SLEAP 子 PID 14046，子进程 `CUDA_VISIBLE_DEVICES=1`。启动收据在 `runs/sleap_gerbils_pose_full/formal_training_launch.json`，实时 command receipt 在子进程结束时补齐。
 
-- 运行时审计：`MAT_workspace/upstream_audit/sleap_nn/version.txt` 为 `sleap-nn 0.3.3`；`config_help.txt`、`train_help.txt`、`predict_help.txt`、`eval_help.txt` 为本机 CLI 原文。
-- 训练：`MAT_workspace/runs/sleap_gerbils_pose_smoke/`。官方 stdout 明确 `max_epochs=2 reached`；checkpoint `global_step=2`、optimizer steps=2、epoch=0/1；`training_log.csv` 第 1 个 epoch train loss=0.019036374986171722、val loss=0.018797585740685463；best checkpoint 为 `models/260908_181311.bottomup.n=383/best.ckpt`（104,729,166 bytes）。官方随后全量 train/val post-eval 在 CPU 长时间运行后被终止，`train.command.json` 的 `return_code=-15` 保留，不把它写成完整 CLI 成功。
+- 运行时审计：`MAT_workspace/upstream_audit/sleap_nn/version.txt` 为 `sleap-nn 0.3.3`；`config_help.txt`、`train_help.txt`、`predict_help.txt`、`eval_help.txt` 为本机 CLI 原文。`train_help.txt` 已核验 `trainer_config.resume_ckpt_path`。
+- MegaDescriptor-T-224：HF revision `3ea58ff6c6195bc748bb86c111ff40c32bdddcba`；config 609 B/SHA `27ef9cc22f677980785e0778fada1bbc03a9f6a294333756f308638f2e83b86c`，weights 204,267,588 B/SHA `62f53e6335d5f8ea4d764c91b442f8daa5ce7f316d388cc890e06c943218190c`，均 `AUTHORIZED_PROXY` 收据，MIT。`IdentityPreprocessSpec` 与 torchvision BCHW bicubic reference 的 audit 为 `EQUIVALENT`（max/mean abs error 0）。
+- smoke 训练仍为 `MAT_workspace/runs/sleap_gerbils_pose_smoke/`，官方 stdout `max_epochs=2 reached`；checkpoint `global_step=2`、optimizer steps=2、epoch=0/1，明确只是 smoke。formal 目录为 `MAT_workspace/runs/sleap_gerbils_pose_full/`，已写到 `global_step=400`/`epoch=1`，50 epoch 仍在运行；不以中间 checkpoint 充当正式终点。
 - test predict：`runs/sleap_gerbils_pose_predict_eval/test_predictions.slp` 42 labels、0 predicted instances（默认 peak threshold 0.2）；0.15+max_instances=4 的复核同样 0 instances。官方 eval 输出 `eval_peak015_max4/metrics_official.json`：`SUCCEEDED_NO_PREDICTIONS`、metrics/NPZ 为 null，故没有 pose 数字可报告。
 - continuous tracking smoke：`runs/sleap_gerbils_clip_tracking_smoke/example_5min.predictions.slp`，官方 `predict --tracking --frames 0-15`，真实 16 连续帧、0 instances、return code 0。视频实测 1280×1024、25 FPS、2,560 帧（约 102.4 s）；完整全片 CPU 运行未完成，状态 `BLOCKED_CPU_BUDGET`，不使用 `example_tracking.slp` 计算 HOTA/ID 指标。
 
@@ -51,7 +52,7 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 | 项目 | 状态 | 实际事实 |
 |---|---|---|
-| B0_global_static_gallery | `BLOCKED_MISSING_IDENTITY_ASSET` | 代码和 TEST_FIXTURE 链存在；没有 MegaDescriptor-T-224 官方 config+checkpoint，HF 直连超时，不能用缓存 ImageNet Swin 冒充；persistent accuracy/unknown/confusion 全为 `null` |
+| B0_global_static_gallery | `BLOCKED_POSE_TEST_NOT_SUCCEEDED` | 官方 MegaDescriptor-T-224 已核验，file-backed H_oracle_reference runner 已就绪但尚未运行；当前必须等待 full pose test 非零 predictions/metrics，故 persistent accuracy/unknown/confusion 仍为 `null` |
 | B1_part_static / EvidenceMatcher | `IMPLEMENTED / NOT_RUN` | ROIAlign 部位证据、固定 fusion 和 trainable head 已有契约测试；无 identity 训练数据 |
 | B2 safe memory | `IMPLEMENTED / NOT_RUN` | `LongitudinalGalleryStore` 的 anchor/confirmed/pending、multi-exemplar score、`MemoryCommitGate` 和 end-of-session commit 已有；无真实跨 session 结果 |
 | H-human | `BLOCKED_NEEDS_REFERENCE_REVIEW` | 未进行人工核验，不填人工秒数 |
@@ -61,15 +62,19 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 ## 验证
 
-源码与契约测试：`pytest -q` → **20 passed, 2 skipped**。新增测试覆盖首次 session quarantine、第二 session promotion、anchor descriptor 不被 legacy static store 覆盖，以及私有 pose truth 字段的 leakage rejection；目标 runtime 中还做了 ROIAlign、detach、EvidenceMatcher 的最小真实 forward（global `[1,6]`、parts `[1,2,6]`，坐标无梯度），但没有把它写成论文指标。
+源码与契约测试：`pytest -q` → **28 passed, 4 skipped**。新增测试覆盖 full/smoke checkpoint 隔离、显式 train-step 参数、authorized-proxy host scope、Mega preprocess、全参考池化、真实 bbox/S0 选择和中性 sample 合约；目标 runtime 已加载官方 Mega 权重并完成 BCHW 预处理等价审计与 ROI forward，但没有把它写成论文指标。
 
 ## 下一条可执行命令
 
 ```bash
 export MAT_WORK_ROOT=/data2/usr_for_deadline/MAT_workspace
-export MEGA_CHECKPOINT=/data2/usr_for_deadline/MAT_workspace/assets/identity/megadescriptor_t_224.ckpt
-# 取得并核验与 checkpoint 同目录的 config.json 后，再执行；当前文件不存在，故保持 BLOCKED。
+export MEGA_CHECKPOINT=/data2/usr_for_deadline/MAT_workspace/assets/identity/megadescriptor_t_224/pytorch_model.bin
+# full pose 完成后先运行独立 full test；只有非零实例和官方 metrics 后，才跑 oracle crop diagnostic。
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli baseline sleap-gerbils \
+  --stage test-full --device auto --gpu-index 1 \
+  --work-root "$MAT_WORK_ROOT" --run-dir "$MAT_WORK_ROOT/runs/sleap_gerbils_baseline"
+# 随后才允许严格 H_oracle_reference 的 B0（预测 pose 版本仍需另行审计）。
 PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli experiment b0 \
-  --config configs/experiments/gerbils/B0_global_static.yaml \
+  --config configs/experiments/gerbils/B0_oracle_crop_diagnostic.yaml \
   --identity-checkpoint "$MEGA_CHECKPOINT" --work-root "$MAT_WORK_ROOT"
 ```

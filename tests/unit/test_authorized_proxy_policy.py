@@ -1,6 +1,7 @@
 import json
 
 from mat.assets import AuthorizedProxyPolicy, AssetDownloader
+from mat.core.errors import IntegrityError
 from mat.assets.catalog import AssetSpec
 
 
@@ -35,3 +36,24 @@ def test_direct_only_still_blocks_unverified_route():
         assert type(exc).__name__ == "RouteNotApprovedError"
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("direct-only policy unexpectedly approved a route")
+
+
+def test_authorized_proxy_requires_asset_host_allowlist():
+    policy = AuthorizedProxyPolicy()
+    downloader = AssetDownloader(__import__("pathlib").Path("/tmp/mat-policy-test"))
+    unrestricted = AssetSpec("unrestricted", "https://example.org/model.bin", "weights",
+                             download_url_verified=True)
+    try:
+        downloader._effective_policy(unrestricted, policy)
+    except IntegrityError:
+        pass
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("authorized proxy accepted an asset without host scope")
+    wildcard = AssetSpec("wildcard", "https://example.org/model.bin", "weights",
+                          allowed_hosts=("*",), download_url_verified=True)
+    try:
+        downloader._effective_policy(wildcard, policy)
+    except IntegrityError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("authorized proxy accepted wildcard host scope")

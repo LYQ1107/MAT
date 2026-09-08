@@ -1,0 +1,30 @@
+schema_version: mat.experiment.v1
+experiment_id: B0_oracle_crop_diagnostic
+dataset: sleap_gerbils
+split: {unit: session, strategy: frozen_session_split, seed: 17}
+protocol:
+  enrollment: oracle_reference
+  enrollment_provenance: H_oracle_reference
+  session_order: chronological
+  prediction_mode: offline_within_session
+  update_timing: end_of_session
+  target_identity_labels_after_reference: false
+  target_pose_labels_for_training: false
+  query_ground_truth_boxes: false
+  query_ground_truth_masks: false
+  future_sessions_visible: false
+pose: {backend: sleap_nn, checkpoint_scope: full_only, keypoints: gerbil_14}
+identity:
+  backend: wildlife_tools
+  descriptor: megadescriptor_t_224
+  checkpoint_scope: verified_local_only
+  feature_scope: global_crop
+  train_backbone: false
+matching: {mode: global_only, solver: hungarian_evaluator_only, preserve_detection_index: true}
+memory: {policy: frozen, immutable_anchor: true, update: disabled}
+evaluation:
+  reference_mode: H_oracle_reference
+  query_box_source: oracle_pose_bbox_diagnostic_only
+  identity_mapping: S0_fixed_reference_only
+  pose_gt: sparse_provider_labeled_frames
+  leakage_guard: query_ground_truth_identity_never_read_by_model

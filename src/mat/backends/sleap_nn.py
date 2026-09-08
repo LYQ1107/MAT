@@ -67,20 +67,23 @@ class SleapNNBackend:
             "command_line": shlex.join(argv),
             "cwd": str(cwd.expanduser().resolve()) if cwd else str(Path.cwd()),
             "started_at": started,
+            "pid": None,
             "return_code": None,
             "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path),
         }
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 argv,
                 cwd=str(cwd.expanduser().resolve()) if cwd else None,
                 env=dict(self.env) if self.env is not None else None,
                 capture_output=True,
                 text=True,
                 errors="replace",
-                check=False,
             )
+            receipt["pid"] = process.pid
+            stdout, stderr = process.communicate()
+            completed = subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
         except Exception as exc:
             # Persist the attempted command and failure type without including
             # the environment (which could contain proxy credentials).
@@ -162,6 +165,9 @@ class SleapNNBackend:
         val_slp: Path,
         run_dir: Path,
         max_epochs: int,
+        *,
+        train_steps_per_epoch: int | None = None,
+        resume_checkpoint: Path | None = None,
     ) -> Path:
         config_path = config_path.expanduser().resolve()
         train_slp = train_slp.expanduser().resolve()
@@ -171,6 +177,12 @@ class SleapNNBackend:
             raise MissingAssetError("SLEAP-NN train requires existing config, train and validation labels")
         if max_epochs <= 0:
             raise ValueError("max_epochs must be positive")
+        if train_steps_per_epoch is not None and train_steps_per_epoch <= 0:
+            raise ValueError("train_steps_per_epoch must be positive when supplied")
+        if resume_checkpoint is not None:
+            resume_checkpoint = resume_checkpoint.expanduser().resolve()
+            if not resume_checkpoint.is_file():
+                raise MissingAssetError(f"missing SLEAP resume checkpoint: {resume_checkpoint}")
         run_dir.mkdir(parents=True, exist_ok=True)
         ckpt_dir = run_dir / "models"
         args = [
@@ -188,11 +200,19 @@ class SleapNNBackend:
             # ``null`` and failing schema validation.
             f"trainer_config.max_epochs={int(max_epochs)}",
             "trainer_config.save_ckpt=true",
-            "trainer_config.min_train_steps_per_epoch=1",
-            *(["+trainer_config.train_steps_per_epoch=1"] if max_epochs <= 2 else []),
             f"trainer_config.ckpt_dir={ckpt_dir}",
             "trainer_config.use_wandb=false",
         ]
+        # A step override is intentionally explicit. It must never be inferred
+        # from max_epochs, otherwise a formal run can silently become smoke.
+        if train_steps_per_epoch is not None:
+            args.extend([
+                "trainer_config.min_train_steps_per_epoch=1",
+                f"+trainer_config.train_steps_per_epoch={int(train_steps_per_epoch)}",
+            ])
+        if resume_checkpoint is not None:
+            # This key is present in the audited public SLEAP-NN 0.3.3 schema.
+            args.append(f"trainer_config.resume_ckpt_path={resume_checkpoint}")
         self._run(args, output_dir=run_dir, operation="train", cwd=run_dir)
         checkpoints = sorted(ckpt_dir.rglob("*.ckpt")) if ckpt_dir.exists() else sorted(run_dir.rglob("*.ckpt"))
         if not checkpoints:

@@ -16,7 +16,7 @@ import requests
 
 from mat.core.errors import IntegrityError, RouteNotApprovedError, MATError
 from .catalog import AssetSpec, ArtifactReceipt, ProbeReceipt
-from .policy import DirectOnlyPolicy
+from .policy import AuthorizedProxyPolicy, DirectOnlyPolicy
 from .verify import sha256_file, verify_file, validate_archive
 from .import_local import import_local as import_local_artifact
 
@@ -57,9 +57,20 @@ class AssetDownloader:
 
     @staticmethod
     def _effective_policy(asset: AssetSpec, policy: DirectOnlyPolicy) -> DirectOnlyPolicy:
-        """Merge per-asset provider allowlist without mutating the caller policy."""
+        """Merge per-asset provider allowlist without mutating the caller policy.
+
+        Authorized proxy transfers must always carry an explicit asset host
+        allowlist.  An empty list (or a wildcard) would turn the opt-in proxy
+        into an ambient network escape hatch, so reject it before any request.
+        """
+        if isinstance(policy, AuthorizedProxyPolicy):
+            asset_hosts = frozenset(host.lower().rstrip(".") for host in asset.allowed_hosts)
+            if not asset_hosts or "*" in asset_hosts:
+                raise IntegrityError(
+                    f"{asset.asset_id}: authorized-proxy requires explicit non-wildcard allowed_hosts"
+                )
         if asset.allowed_hosts:
-            asset_hosts = frozenset(asset.allowed_hosts)
+            asset_hosts = frozenset(host.lower().rstrip(".") for host in asset.allowed_hosts)
             allowed = asset_hosts if not policy.allowed_hosts else policy.allowed_hosts & asset_hosts
             if not allowed:
                 raise IntegrityError("asset host allowlist does not intersect policy allowlist")
