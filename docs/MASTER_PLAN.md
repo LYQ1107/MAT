@@ -54,8 +54,11 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 ```bash
 export MAT_WORK_ROOT=/data2/usr_for_deadline/MAT_workspace
 export MEGA_CHECKPOINT=/data2/usr_for_deadline/MAT_workspace/assets/identity/megadescriptor_t_224/pytorch_model.bin
-# 正式训练成功退出且 full test 产生非零预测后，先运行严格 H_oracle_reference 的 B0 诊断；
-# 若 pose test 仍为零，CLI 必须保持 BLOCKED，不得把 smoke checkpoint 或预测当 GT。
+# 正式训练成功退出后，先独立运行 full test；只有产生非零实例和官方 metrics 才允许 B0。
+PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli baseline sleap-gerbils \
+  --stage test-full --device auto --gpu-index 1 \
+  --work-root "$MAT_WORK_ROOT" --run-dir "$MAT_WORK_ROOT/runs/sleap_gerbils_baseline"
+# 随后才运行严格 H_oracle_reference 的 B0 诊断；若 pose test 为零，CLI 必须保持 BLOCKED。
 PYTHONPATH=/data2/usr_for_deadline/MAT/src python -m mat.cli experiment b0 \
   --config configs/experiments/gerbils/B0_oracle_crop_diagnostic.yaml \
   --identity-checkpoint "$MEGA_CHECKPOINT" --work-root "$MAT_WORK_ROOT"
