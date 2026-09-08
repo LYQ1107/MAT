@@ -77,7 +77,12 @@ class SleapNNBackend:
                 argv,
                 cwd=str(cwd.expanduser().resolve()) if cwd else None,
                 env=dict(self.env) if self.env is not None else None,
-                capture_output=True,
+                # ``capture_output`` is a ``subprocess.run`` convenience
+                # keyword and is not accepted by ``Popen``.  Use explicit
+                # pipes so the audited stdout/stderr capture works on the
+                # Python versions used by the isolated SLEAP runtime.
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 errors="replace",
             )

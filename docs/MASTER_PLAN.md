@@ -25,7 +25,7 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M3 — 真实 SLEAP pose baseline、predict 和 tracking smoke
 
-**状态：`RUNNING / PARTIALLY_EVALUATED`。** 只调用官方 `sleap-nn` CLI；首次 `--version`、`config/train/predict/eval --help` 原文和 command receipts 在 `MAT_workspace/upstream_audit/sleap_nn/`。实际版本为 `sleap-nn 0.3.3`。官方 `config --auto --pipeline bottomup` 生成 training config；修复了 val list、typed validation_fraction 和 skia API 兼容性后，CPU 2-epoch smoke 真正完成：`best.ckpt`/`last.ckpt` 在 `runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/`，checkpoint `global_step=2`，optimizer step=2。修复训练封装后，GPU 1 上以 `max_epochs=50` 且不注入 `train_steps_per_epoch` 启动正式训练；当前已完成 epoch 49（累计 `global_step=10000`、每 epoch 200 steps），不把中间 checkpoint 当作终点。正式 test/predict 将在进程成功退出后单独运行。
+**状态：`COMPLETED / FULL_TEST_PENDING`。** 只调用官方 `sleap-nn` CLI；首次 `--version`、`config/train/predict/eval --help` 原文和 command receipts 在 `MAT_workspace/upstream_audit/sleap_nn/`。实际版本为 `sleap-nn 0.3.3`。官方 `config --auto --pipeline bottomup` 生成 training config；修复了 val list、typed validation_fraction 和 skia API 兼容性后，CPU 2-epoch smoke 真正完成：`best.ckpt`/`last.ckpt` 在 `runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/`，checkpoint `global_step=2`，optimizer step=2。修复训练封装后，GPU 1 上以 `max_epochs=50` 且不注入 `train_steps_per_epoch` 完成正式训练；最后日志 epoch 49、`global_step=10000`，不把中间 checkpoint 当作终点。首次 full test 暴露并已修复 `Popen(capture_output=True)` 参数错误；修复后的独立 full test 仍需执行。
 
 使用真实 checkpoint 对 test labeled frames 的官方 predict 已返回 0，42 labels/0 instances；官方 eval 明确输出 `SUCCEEDED_NO_PREDICTIONS` 且不产生 NPZ，不能报告 pose 数字。对真实 `example_5min.mp4`（1280×1024、25 FPS、2560 帧，实测约 102.4 s）连续帧 0–15 运行了官方 `predict --tracking`，输出 16 帧 SLP、0 instances；这是 **tracking format smoke，不是全片完成，也不是 GT 评价**。完整 2560 帧 CPU 推理未运行，标记 `BLOCKED_CPU_BUDGET`。
 
@@ -47,7 +47,7 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M8 — 封存和复现交付
 
-**状态：`RUNNING / RESEARCH_PIPELINE_READY`。** `mat baseline sleap-gerbils` 的 smoke 与正式训练入口、四个 `mat experiment` 入口均可生成 receipts；正式 50 epoch 训练完成后才运行 full test、B0 及最终汇总。阶段提交及文档收尾均使用非 force fast-forward；工作区数据、checkpoint、wheelhouse、私有 truth 不提交。`docs/PROGRESS.md` 与 `docs/RESULTS_GERBILS_V0_V2.md` 持续标明实际事实、阻塞和下一条命令。
+**状态：`RUNNING / FULL_TEST_PENDING`。** `mat baseline sleap-gerbils` 的 smoke 与正式训练入口、四个 `mat experiment` 入口均可生成 receipts；正式 50 epoch 训练已完成，首次 full test 的 Popen 参数错误已修复，待独立 full test 成功后再按门控决定 B0。阶段提交及文档收尾均使用非 force fast-forward；工作区数据、checkpoint、wheelhouse、私有 truth 不提交。`docs/PROGRESS.md` 与 `docs/RESULTS_GERBILS_V0_V2.md` 持续标明实际事实、阻塞和下一条命令。
 
 ## 下一条可执行命令
 
