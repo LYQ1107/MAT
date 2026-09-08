@@ -357,7 +357,7 @@ def run_b0_oracle_crop_diagnostic(samples: Sequence[GerbilInstanceSample],
                                   gallery_store: GalleryStore, session_rows: Sequence[Mapping[str, Any]], *,
                                   cohort_uid: str = "gerbils-b0-oracle") -> GerbilB0Result:
     """Run the first strict H_oracle_reference diagnostic with evaluator crops."""
-    enriched_truth = [dict(truth_by_observation[uid], session_uid=sample.session_uid)
+    enriched_truth = [dict(truth_by_observation[uid], observation_uid=uid, session_uid=sample.session_uid)
                       for uid, sample in ((sample.observation_uid, sample) for sample in samples)
                       if uid in truth_by_observation]
     s0 = select_s0_sessions(session_rows, enriched_truth)
@@ -402,7 +402,7 @@ def run_b0_predicted_pose(samples: Sequence[GerbilInstanceSample],
                           gallery_store: GalleryStore, session_rows: Sequence[Mapping[str, Any]], *,
                           cohort_uid: str = "gerbils-b0-predicted") -> GerbilB0Result:
     """Run B0 using predicted pose boxes; truth is evaluator-only."""
-    enriched_truth = [dict(truth_by_observation[uid], session_uid=sample.session_uid)
+    enriched_truth = [dict(truth_by_observation[uid], observation_uid=uid, session_uid=sample.session_uid)
                       for uid, sample in ((sample.observation_uid, sample) for sample in samples)
                       if uid in truth_by_observation]
     s0 = select_s0_sessions(session_rows, enriched_truth)
