@@ -21,13 +21,13 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M2 — 适配、匿名 manifest、冻结边界和 B0 条件
 
-**状态：`SMOKE_PASSED / IMPLEMENTED`。** `SleapGerbilsAdapter` 使用公开 `sleap_io.load_slp`，保持 source filename/video index，生成中性 `frames/sessions/observations` 与仅供评价的 `private_pose_identity_truth`；`observations.jsonl` 不含身份、keypoint GT 或 visibility GT。已对 23 个 source-video sessions 用 seed 17 实际冻结 `13/4/6` source/development/sealed 划分（`f1a04319e89f90a6`），但 provider 文件本身仍是 random frame split，不能解释为 strict longitudinal split。B0 的 global-only static gallery/固定 S0 mapping 链已使用官方本地 MegaDescriptor-T-224 文件实现；正式 B0 仍等待 full pose test 非零实例。
+**状态：`SMOKE_PASSED / IMPLEMENTED`。** `SleapGerbilsAdapter` 使用公开 `sleap_io.load_slp`，保持 source filename/video index，生成中性 `frames/sessions/observations` 与仅供评价的 `private_pose_identity_truth`；`observations.jsonl` 不含身份、keypoint GT 或 visibility GT。已对 23 个 source-video sessions 用 seed 17 实际冻结 `13/4/6` source/development/sealed 划分（`f1a04319e89f90a6`），但 provider 文件本身仍是 random frame split，不能解释为 strict longitudinal split。B0 的 global-only static gallery/固定 S0 mapping 链已使用官方本地 MegaDescriptor-T-224 文件实现；正式 B0 已在 full pose test 门控通过后完成 oracle-crop diagnostic。
 
 ## M3 — 真实 SLEAP pose baseline、predict 和 tracking smoke
 
-**状态：`COMPLETED / FULL_TEST_PENDING`。** 只调用官方 `sleap-nn` CLI；首次 `--version`、`config/train/predict/eval --help` 原文和 command receipts 在 `MAT_workspace/upstream_audit/sleap_nn/`。实际版本为 `sleap-nn 0.3.3`。官方 `config --auto --pipeline bottomup` 生成 training config；修复了 val list、typed validation_fraction 和 skia API 兼容性后，CPU 2-epoch smoke 真正完成：`best.ckpt`/`last.ckpt` 在 `runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/`，checkpoint `global_step=2`，optimizer step=2。修复训练封装后，GPU 1 上以 `max_epochs=50` 且不注入 `train_steps_per_epoch` 完成正式训练；最后日志 epoch 49、`global_step=10000`，不把中间 checkpoint 当作终点。full test 已修复 Popen 捕获和 SLEAP legacy object-NPZ 读取两个兼容问题；独立 full test 仍需最终重跑。
+**状态：`SUCCEEDED`。** 只调用官方 `sleap-nn` CLI；首次 `--version`、`config/train/predict/eval --help` 原文和 command receipts 在 `MAT_workspace/upstream_audit/sleap_nn/`。实际版本为 `sleap-nn 0.3.3`。官方 `config --auto --pipeline bottomup` 生成 training config；修复了 val list、typed validation_fraction 和 skia API 兼容性后，CPU 2-epoch smoke 真正完成：`best.ckpt`/`last.ckpt` 在 `runs/sleap_gerbils_pose_smoke/models/260908_181311.bottomup.n=383/`，checkpoint `global_step=2`，optimizer step=2。修复训练封装后，GPU 1 上以 `max_epochs=50` 且不注入 `train_steps_per_epoch` 完成正式训练；最后日志 epoch 49、`global_step=10000`，不把中间 checkpoint 当作终点。独立 full test 已成功：42 labeled frames/197 instances，验证阈值 0.10 为 43 frames/198 instances，官方 metrics `mOKS=0.4020083039400739`、OKS VOC mAP=`0.1086789079250195`、mAR=`0.1392156862745098`、mPCK=`0.25666023166023166`、平均距离=`8.790849863678831 px`。两个真实兼容问题（Popen 捕获和 SLEAP legacy object-NPZ 读取）均以源码修复和回归测试封存。
 
-使用真实 checkpoint 对 test labeled frames 的官方 predict 已返回 0，42 labels/0 instances；官方 eval 明确输出 `SUCCEEDED_NO_PREDICTIONS` 且不产生 NPZ，不能报告 pose 数字。对真实 `example_5min.mp4`（1280×1024、25 FPS、2560 帧，实测约 102.4 s）连续帧 0–15 运行了官方 `predict --tracking`，输出 16 帧 SLP、0 instances；这是 **tracking format smoke，不是全片完成，也不是 GT 评价**。完整 2560 帧 CPU 推理未运行，标记 `BLOCKED_CPU_BUDGET`。
+旧 smoke checkpoint 对 test labeled frames 的官方 predict 已返回 0，42 labels/0 instances；官方 eval 明确输出 `SUCCEEDED_NO_PREDICTIONS` 且不产生 NPZ，不能把 smoke 当 formal 指标。formal full checkpoint 的 test predict/eval 已成功产生 42 labels/197 instances 和官方 metrics。对真实 `example_5min.mp4`（1280×1024、25 FPS、2560 帧，实测约 102.4 s）连续帧 0–15 运行了官方 `predict --tracking`，输出 16 帧 SLP、0 instances；这是 **tracking format smoke，不是全片完成，也不是 GT 评价**。完整 2560 帧 CPU 推理未运行，标记 `BLOCKED_CPU_BUDGET`。
 
 ## M4 — H/A 建档和跨 session runner
 
@@ -35,7 +35,7 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M5 — 部位证据与安全 memory
 
-**状态：`IMPLEMENTED / VERIFIED`。** 新增 `PosePartCropper`（真正的 `torchvision.ops.roi_align`、全局/部位 ROI、finite/score/valid 门控、part quality）和不复制 global embedding 的 `PartAwareIdentityEncoder`；B0 matcher 严格 global-only，新增固定 B1 fusion 与 trainable `EvidenceMatcher`。新增 `LongitudinalGalleryStore`（anchor/confirmed/pending、多 exemplar top-k、fingerprint）和确定性的 `MemoryCommitGate`。官方 MegaDescriptor-T-224 的本地加载、224/BCHW 预处理与 torchvision reference 逐元素等价（max/mean 误差 0）已验证；正式 identity 指标等待 pose test 与可用跨日真值。
+**状态：`IMPLEMENTED / VERIFIED`。** 新增 `PosePartCropper`（真正的 `torchvision.ops.roi_align`、全局/部位 ROI、finite/score/valid 门控、part quality）和不复制 global embedding 的 `PartAwareIdentityEncoder`；B0 matcher 严格 global-only，新增固定 B1 fusion 与 trainable `EvidenceMatcher`。新增 `LongitudinalGalleryStore`（anchor/confirmed/pending、多 exemplar top-k、fingerprint）和确定性的 `MemoryCommitGate`。官方 MegaDescriptor-T-224 的本地加载、224/BCHW 预处理与 torchvision reference 逐元素等价（max/mean 误差 0）已验证；B0 global-only oracle diagnostic 已使用该冻结 backend，B1/B2 仍无训练数据和纵向真值。
 
 ## M6 — O2 和外部基线
 
@@ -47,7 +47,7 @@ SLEAP 固定路径：`MAT_workspace/datasets/sleap_gerbils/`。实际对象为 t
 
 ## M8 — 封存和复现交付
 
-**状态：`RUNNING / FULL_TEST_PENDING`。** `mat baseline sleap-gerbils` 的 smoke 与正式训练入口、四个 `mat experiment` 入口均可生成 receipts；正式 50 epoch 训练已完成，首次 full test 的 Popen 参数错误已修复，待独立 full test 成功后再按门控决定 B0。阶段提交及文档收尾均使用非 force fast-forward；工作区数据、checkpoint、wheelhouse、私有 truth 不提交。`docs/PROGRESS.md` 与 `docs/RESULTS_GERBILS_V0_V2.md` 持续标明实际事实、阻塞和下一条命令。
+**状态：`SUCCEEDED`。** `mat baseline sleap-gerbils` 的 smoke、正式训练和 full test receipts 已完成；门控通过后 B0 oracle-crop diagnostic 也已真实完成。B0 使用固定 S0 `sleap_gerbils:session:0b1d08252e086969ba10`、四组 anchors `16/16/9/16`，1428 个 query instances 的 accuracy=`0.36764705882352944`、F1=`0.5993150684931506`、unknown=`201`；它严格是 `H_oracle_reference / oracle_crop_diagnostic`，不能升级为人工 H、端到端 A 或跨日 biological-ID 结果。期间发现并修复了异形 ROI 直接 `np.stack` 的实现错误。阶段提交及文档收尾均使用非 force fast-forward；工作区数据、checkpoint、wheelhouse、私有 truth 不提交。`docs/PROGRESS.md` 与 `docs/RESULTS_GERBILS_V0_V2.md` 保留未满足的 H-human、跨日映射和 pose-GT 阻塞。
 
 ## 下一条可执行命令
 

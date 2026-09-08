@@ -51,10 +51,21 @@ does not convert a smoke run into a formal result.
 12. **B1/B2/O1.** These are not reported as runs until B0 has a measured full
     pose input and identity result.  Missing implementations raise an explicit
     `NotImplementedError`; no fake missing-asset receipt is emitted.
-13. **Current diagnostic and next issues.** The provider-label contact sheet is
+13. **Full test and B0 completion.** The independent formal full test now
+    succeeds with 42 labeled frames/197 instances (validation threshold 0.10:
+    43 frames/198 instances) and official metrics are recorded in
+    `runs/sleap_gerbils_baseline/run_manifest.json`.  The first B0 retry exposed
+    a real implementation bug: oracle ROI crops have heterogeneous pixel
+    shapes, so stacking them before preprocessing raised `ValueError: all input
+    arrays must have the same shape`.  `GlobalIdentityBackend.encode_crops`
+    now applies the audited 224/BCHW transform to each crop and concatenates
+    only fixed tensors; the generic runner has a per-row fallback and a
+    regression test.  The rerun succeeded as a static
+    `H_oracle_reference/oracle_crop_diagnostic` (S0 one session, anchors
+    16/16/9/16; 1428 labeled query instances, accuracy 0.367647, F1 0.599315,
+    unknown 201).  The provider-label contact sheet remains
     `runs/data_sanity/gerbils_gt_contact_sheet.png` (eight seed-17 train
     frames).  Labels are only `true_for_provider_labeled_sessions` because of
-    shaved appearance; dense continuous pose GT and independent cross-day
-    biological-ID mapping remain unavailable.  After full training exits,
-    run validation/test once, then oracle B0, and report any remaining
-    `BLOCKED_*` status without substituting predictions for GT.
+    shaved appearance; dense continuous pose GT, human H review and
+    independent cross-day biological-ID mapping remain unavailable.  No
+    prediction is substituted for GT, and B1/B2 are not reported as runs.

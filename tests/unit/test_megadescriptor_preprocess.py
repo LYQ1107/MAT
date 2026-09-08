@@ -45,6 +45,10 @@ def test_numpy_bhwc_and_torch_bchw_are_identical_and_official_bicubic():
     assert encoded.global_features.shape == (2, 4)
     assert np.allclose(np.linalg.norm(encoded.global_features, axis=1), 1.0)
 
+    heterogeneous = backend.encode_crops([images[0], images[1, :7, :13]])
+    assert heterogeneous.global_features.shape == (2, 4)
+    assert np.allclose(np.linalg.norm(heterogeneous.global_features, axis=1), 1.0)
+
 
 def test_preprocess_audit_records_equivalence(tmp_path):
     spec = IdentityPreprocessSpec()

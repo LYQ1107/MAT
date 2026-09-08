@@ -16,7 +16,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from mat.core.errors import ValidationError
-from mat.core.types import IdentityDescriptor, LocalTracklet
+from mat.core.types import DescriptorBatch, IdentityDescriptor, LocalTracklet
 from mat.enrollment.base import ReferenceVerification
 from mat.enrollment.manual import ManualRegistrar
 from mat.identity.gallery import GalleryStore
@@ -275,7 +275,30 @@ def _descriptor_rows(samples: Sequence[GerbilInstanceSample], encoder: Any,
     descriptors: dict[str, IdentityDescriptor] = {}
     for start in range(0, len(ordered), batch_size):
         chunk = ordered[start:start + batch_size]
-        encoded = encoder.encode(np.stack([_crop(sample.image, boxes[sample.observation_uid]) for sample in chunk]))
+        crops = [_crop(sample.image, boxes[sample.observation_uid]) for sample in chunk]
+        shapes = {crop.shape for crop in crops}
+        if len(shapes) == 1:
+            encoded = encoder.encode(np.stack(crops))
+        elif hasattr(encoder, "encode_crops"):
+            # The verified MegaDescriptor backend preprocesses each ROI before
+            # concatenating tensors, so heterogeneous crop dimensions never
+            # reach np.stack and are not padded with model-visible pixels.
+            encoded = encoder.encode_crops(crops)
+        else:
+            # Keep the generic backend contract usable for test fixtures and
+            # third-party wrappers that only expose ``encode(B,H,W,C)``.  This
+            # is slower, but each call remains a neutral model row and avoids
+            # silently changing the feature-space preprocessing.
+            encoded_batches = [encoder.encode(crop[None, ...]) for crop in crops]
+            encoded = DescriptorBatch(
+                np.concatenate([batch.global_features for batch in encoded_batches], axis=0),
+                np.concatenate([batch.part_features for batch in encoded_batches], axis=0),
+                np.concatenate([batch.part_valid for batch in encoded_batches], axis=0),
+                np.concatenate([batch.part_quality for batch in encoded_batches], axis=0),
+                encoded_batches[0].encoder_fingerprint,
+            )
+        if encoded.global_features.shape[0] != len(chunk):
+            raise ValidationError("identity encoder returned a row count different from the crop batch")
         descriptors.update({sample.observation_uid: IdentityDescriptor(encoded.global_features[i], encoded.part_features[i],
                                                                         encoded.part_valid[i], encoded.part_quality[i],
                                                                         encoded.encoder_fingerprint)

@@ -144,8 +144,14 @@ class MegaDescriptorRuntime(nn.Module if torch is not None else object):
     def preprocess(self, images: Any):
         return self.preprocess_spec.apply(images)
 
-    def forward(self, images: Any):
-        tensor = self.preprocess(images)
+    def _forward_backbone(self, tensor):
+        """Run the frozen backbone on an already preprocessed BCHW tensor.
+
+        ``GlobalIdentityBackend.encode_crops`` uses this path after applying
+        the audited transform to each variable-sized ROI separately.  Keeping
+        the backbone path here avoids a second resize and preserves the exact
+        official torchvision interpolation contract.
+        """
         output = self.backbone(tensor)
         if isinstance(output, dict):
             output = output.get("embedding", output.get("features", output.get("x", output)))
@@ -164,6 +170,17 @@ class MegaDescriptorRuntime(nn.Module if torch is not None else object):
         if self.output_dim <= 0:
             self.output_dim = int(output.shape[1])
         return output
+
+    def forward_preprocessed(self, tensor: Any):
+        """Run inference on BCHW tensors produced by :meth:`preprocess`."""
+        if torch is None:  # pragma: no cover
+            raise DependencyUnavailableError("PyTorch is required for MegaDescriptor inference")
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4 or tensor.shape[1] != 3:
+            raise ValidationError("preprocessed identity input must be BCHW with three channels")
+        return self._forward_backbone(tensor)
+
+    def forward(self, images: Any):
+        return self._forward_backbone(self.preprocess(images))
 
     def write_preprocess_audit(self, path: Path, *, images: Any | None = None,
                                reference_transform: Callable[[Any], Any] | None = None) -> dict[str, Any]:
@@ -216,6 +233,53 @@ class GlobalIdentityBackend:
             self.runtime.eval()
         with torch.no_grad():
             output = self.runtime(images)
+            output = output.detach().cpu().numpy().astype(np.float32)
+        if output.ndim != 2:
+            raise ValidationError("identity model must return [B,D]")
+        norms = np.linalg.norm(output, axis=1, keepdims=True)
+        output = output / np.where(norms > 0, norms, 1.0)
+        parts = np.zeros((len(output), 0, output.shape[1]), dtype=np.float32)
+        return DescriptorBatch(output, parts, np.zeros((len(output), 0), bool),
+                               np.zeros((len(output), 0), np.float32), self.fingerprint)
+
+    def encode_crops(self, crops: Any) -> DescriptorBatch:
+        """Encode a sequence of variable-sized HWC crops in one forward pass.
+
+        ROI crops are naturally heterogeneous.  They must not be padded or
+        stacked before the audited transform: each crop is converted to a
+        fixed BCHW tensor with the same verified torchvision resize/normalize
+        contract, then the frozen backbone receives the concatenated batch.
+        """
+        try:
+            import torch
+        except ImportError as exc:  # pragma: no cover
+            raise DependencyUnavailableError("PyTorch is required for MegaDescriptor inference") from exc
+        if isinstance(crops, np.ndarray):
+            if crops.ndim == 3:
+                crops = [crops]
+            elif crops.ndim == 4:
+                crops = [crops[index] for index in range(crops.shape[0])]
+            else:
+                raise ValidationError("identity crops must be a sequence of HWC arrays")
+        crops = list(crops)
+        if not crops:
+            raise ValidationError("identity crop sequence cannot be empty")
+        tensors = []
+        for crop in crops:
+            tensor = self.runtime.preprocess(crop)
+            if tensor.ndim == 3:
+                tensor = tensor.unsqueeze(0)
+            if tensor.ndim != 4 or tensor.shape[0] != 1:
+                raise ValidationError("each preprocessed identity crop must be one BCHW sample")
+            tensors.append(tensor)
+        batch = torch.cat(tensors, dim=0)
+        if hasattr(self.runtime, "eval"):
+            self.runtime.eval()
+        with torch.no_grad():
+            if hasattr(self.runtime, "forward_preprocessed"):
+                output = self.runtime.forward_preprocessed(batch)
+            else:  # pragma: no cover - compatibility for external runtime wrappers
+                output = self.runtime.backbone(batch)
             output = output.detach().cpu().numpy().astype(np.float32)
         if output.ndim != 2:
             raise ValidationError("identity model must return [B,D]")

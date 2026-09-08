@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from mat.experiments.gerbil_identity import bbox_from_keypoints, select_s0_sessions, GerbilInstanceSample
+from mat.backends.wildlife import NumpyFixtureEncoder
+from mat.experiments.gerbil_identity import (GerbilInstanceSample, _descriptor_rows,
+                                              bbox_from_keypoints, select_s0_sessions)
 
 
 def test_bbox_from_keypoints_rejects_nonfinite_or_insufficient_points():
@@ -27,3 +29,20 @@ def test_neutral_sample_contract_has_no_identity_fields():
                                   None, np.full((14, 2), np.nan, np.float32),
                                   np.zeros(14, np.float32), np.zeros(14, bool), "t")
     assert not hasattr(sample, "gt_identity")
+
+
+def test_descriptor_rows_handles_heterogeneous_roi_shapes_without_stack_error():
+    samples = [
+        GerbilInstanceSample("o0", "s0", 0, 0.0, np.zeros((10, 12, 3), np.uint8),
+                             None, np.full((4, 2), np.nan, np.float32),
+                             np.zeros(4, np.float32), np.zeros(4, bool), "t0"),
+        GerbilInstanceSample("o1", "s1", 1, 0.1, np.zeros((15, 20, 3), np.uint8),
+                             None, np.full((4, 2), np.nan, np.float32),
+                             np.zeros(4, np.float32), np.zeros(4, bool), "t1"),
+    ]
+    boxes = {"o0": np.asarray([0, 0, 6, 7], np.float32),
+             "o1": np.asarray([0, 0, 11, 13], np.float32)}
+    descriptors, ordered = _descriptor_rows(samples, NumpyFixtureEncoder(), boxes, batch_size=2)
+    assert [sample.observation_uid for sample in ordered] == ["o0", "o1"]
+    assert set(descriptors) == {"o0", "o1"}
+    assert all(item.global_feature.shape == (6,) for item in descriptors.values())
