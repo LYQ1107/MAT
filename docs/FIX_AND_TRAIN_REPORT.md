@@ -22,7 +22,10 @@ does not convert a smoke run into a formal result.
 5. **Prediction counts/metrics.** The old smoke checkpoint produced zero test
    instances and `SUCCEEDED_NO_PREDICTIONS`; this was not called a SLEAP
    failure.  Full validation sweeps thresholds 0.10/0.15/0.20/0.25 before one
-   test/evaluation pass; zero formal predictions stop B0.
+   test/evaluation pass.  Full validation/test/clip paths include the full
+   checkpoint SHA prefix and live below `sleap_gerbils_pose_full`; an old
+   smoke artifact in the shared run directory cannot be reused.  Zero formal
+   predictions stop B0.
 6. **MegaDescriptor asset.** Official T-224 config and weights are pinned to
    Hugging Face commit `3ea58ff6c6195bc748bb86c111ff40c32bdddcba`, downloaded
    in an authorized-proxy child and recorded with local SHA-256/bytes/license
