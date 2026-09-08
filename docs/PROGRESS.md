@@ -13,7 +13,7 @@
 | M0 | `SMOKE_PASSED` | 实际仓库/AGENTS、代理、路由、GPU、上游 commit/API 审计已写入 `doctor.json`、`docs/NETWORK_AUDIT.md`、`locks/upstream.lock.yaml`；透明代理/TUN 仍无法由用户态完全排除 |
 | M1 | `DOWNLOADED / VERIFIED` | SLEAP 五个对象及官方 MegaDescriptor-T-224 config/weights 已在隔离下载子进程中核验；HF commit、bytes、SHA、MIT、redirect origin 写入 `locks/assets.lock.json`/receipts；Rat/Pig/Cow 未下载 |
 | M2 | `SMOKE_PASSED / IMPLEMENTED` | SLEAP adapter、匿名 manifest、公开 API schema audit、23-session 冻结划分 (`f1a04319e89f90a6`, seed 17)、真实文件型 B0 runner 和两份 B0 配置就绪 |
-| M3 | `RUNNING` | smoke 与 full 命令/检查点已隔离；formal 50 epoch 在 GPU 1 运行，已到 epoch 29 / `global_step=6000`，尚未完成 test/metrics |
+| M3 | `RUNNING` | smoke 与 full 命令/检查点已隔离；formal 50 epoch 在 GPU 1 运行，已到 epoch 30 / `global_step=6200`，尚未完成 test/metrics |
 | M4 | `IMPLEMENTED / BLOCKED_NEEDS_REFERENCE_REVIEW` | H/A 共用 EnrollmentResult、全参考质量池化、end-of-session runner 已实现；尚无人工 H-human 核验 |
 | M5 | `IMPLEMENTED / VERIFIED` | 统一 Mega runtime/preprocess、ROIAlign 部位证据、B1 fusion、EvidenceMatcher、三层 gallery、pending promotion gate 已实现并有测试 |
 | M6 | `NOT_APPLICABLE` | O2/idtracker.ai/idmatcherai/CowIDentifier 缺输入或许可 |
@@ -40,11 +40,11 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 ## 真实运行收据
 
-- `mat baseline sleap-gerbils --stage train-full --device auto --gpu-index 1 --full-epochs 50` 已启动；父 PID 13938，SLEAP 子 PID 14046，子进程 `CUDA_VISIBLE_DEVICES=1`。启动收据在 `runs/sleap_gerbils_pose_full/formal_training_launch.json`，当前观测到 epoch 29 / `global_step=6000`，实时 command receipt 在子进程结束时补齐。
+- `mat baseline sleap-gerbils --stage train-full --device auto --gpu-index 1 --full-epochs 50` 已启动；父 PID 13938，SLEAP 子 PID 14046，子进程 `CUDA_VISIBLE_DEVICES=1`。启动收据在 `runs/sleap_gerbils_pose_full/formal_training_launch.json`，当前观测到 epoch 30 / `global_step=6200`，实时 command receipt 在子进程结束时补齐。
 
 - 运行时审计：`MAT_workspace/upstream_audit/sleap_nn/version.txt` 为 `sleap-nn 0.3.3`；`config_help.txt`、`train_help.txt`、`predict_help.txt`、`eval_help.txt` 为本机 CLI 原文。`train_help.txt` 已核验 `trainer_config.resume_ckpt_path`。
 - MegaDescriptor-T-224：HF revision `3ea58ff6c6195bc748bb86c111ff40c32bdddcba`；config 609 B/SHA `27ef9cc22f677980785e0778fada1bbc03a9f6a294333756f308638f2e83b86c`，weights 204,267,588 B/SHA `62f53e6335d5f8ea4d764c91b442f8daa5ce7f316d388cc890e06c943218190c`，均 `AUTHORIZED_PROXY` 收据，MIT。`IdentityPreprocessSpec` 与 torchvision BCHW bicubic reference 的 audit 为 `EQUIVALENT`（max/mean abs error 0）。
-- smoke 训练仍为 `MAT_workspace/runs/sleap_gerbils_pose_smoke/`，官方 stdout `max_epochs=2 reached`；checkpoint `global_step=2`、optimizer steps=2、epoch=0/1，明确只是 smoke。formal 目录为 `MAT_workspace/runs/sleap_gerbils_pose_full/`，已写到 `global_step=6000`/`epoch=29`，50 epoch 仍在运行；不以中间 checkpoint 充当正式终点。
+- smoke 训练仍为 `MAT_workspace/runs/sleap_gerbils_pose_smoke/`，官方 stdout `max_epochs=2 reached`；checkpoint `global_step=2`、optimizer steps=2、epoch=0/1，明确只是 smoke。formal 目录为 `MAT_workspace/runs/sleap_gerbils_pose_full/`，已写到 `global_step=6200`/`epoch=30`，50 epoch 仍在运行；不以中间 checkpoint 充当正式终点。
 - test predict：`runs/sleap_gerbils_pose_predict_eval/test_predictions.slp` 42 labels、0 predicted instances（默认 peak threshold 0.2）；0.15+max_instances=4 的复核同样 0 instances。官方 eval 输出 `eval_peak015_max4/metrics_official.json`：`SUCCEEDED_NO_PREDICTIONS`、metrics/NPZ 为 null，故没有 pose 数字可报告。
 - continuous tracking smoke：`runs/sleap_gerbils_clip_tracking_smoke/example_5min.predictions.slp`，官方 `predict --tracking --frames 0-15`，真实 16 连续帧、0 instances、return code 0。视频实测 1280×1024、25 FPS、2,560 帧（约 102.4 s）；完整全片 CPU 运行未完成，状态 `BLOCKED_CPU_BUDGET`，不使用 `example_tracking.slp` 计算 HOTA/ID 指标。
 
