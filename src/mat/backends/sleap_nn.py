@@ -22,6 +22,23 @@ class SleapNNCommandError(MATError):
     """A public SLEAP-NN command returned a non-zero status."""
 
 
+def _metrics_json_safe(value: Any) -> Any:
+    """Convert NumPy containers in a legacy SLEAP metrics object to JSON."""
+    import numpy as np
+
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {str(key): _metrics_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_metrics_json_safe(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
 class SleapNNBackend:
     def __init__(
         self,
@@ -285,10 +302,23 @@ class SleapNNBackend:
         metrics: dict[str, Any] = {}
         if npz_path.is_file():
             import numpy as np
-            with np.load(npz_path, allow_pickle=False) as values:
-                for key in values.files:
-                    value = values[key]
-                    metrics[key] = value.item() if value.shape == () else value.tolist()
+            # SLEAP-NN 0.3.3 writes a JSON sibling next to its legacy NPZ.
+            # Prefer that verified JSON representation so evaluation never
+            # unpickles a metrics payload.  The NPZ fallback is retained for
+            # older runtimes and is limited to the file produced by the just-
+            # completed local evaluator command (not a downloaded asset).
+            json_path = npz_path.with_suffix(".json")
+            if json_path.is_file():
+                raw = json.loads(json_path.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    raise ValueError(f"SLEAP metrics JSON must contain an object: {json_path}")
+                metrics = raw
+            else:
+                with np.load(npz_path, allow_pickle=True) as values:
+                    for key in values.files:
+                        value = values[key]
+                        payload = value.item() if value.shape == () else value
+                        metrics[key] = _metrics_json_safe(payload)
         result = {
             # The public evaluator intentionally emits no NPZ when there are
             # zero predicted instances.  Keep that outcome distinct from a

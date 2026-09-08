@@ -13,7 +13,7 @@
 | M0 | `SMOKE_PASSED` | 实际仓库/AGENTS、代理、路由、GPU、上游 commit/API 审计已写入 `doctor.json`、`docs/NETWORK_AUDIT.md`、`locks/upstream.lock.yaml`；透明代理/TUN 仍无法由用户态完全排除 |
 | M1 | `DOWNLOADED / VERIFIED` | SLEAP 五个对象及官方 MegaDescriptor-T-224 config/weights 已在隔离下载子进程中核验；HF commit、bytes、SHA、MIT、redirect origin 写入 `locks/assets.lock.json`/receipts；Rat/Pig/Cow 未下载 |
 | M2 | `SMOKE_PASSED / IMPLEMENTED` | SLEAP adapter、匿名 manifest、公开 API schema audit、23-session 冻结划分 (`f1a04319e89f90a6`, seed 17)、真实文件型 B0 runner 和两份 B0 配置就绪 |
-| M3 | `COMPLETED / FULL_TEST_PENDING` | smoke 与 full 命令/检查点已隔离；formal 50 epoch 已在 GPU 1 完成（最后日志 epoch 49 / `global_step=10000`）；首次 full test 暴露并已修复 Popen 捕获参数错误，修复后针对性与全量契约测试通过，待重新执行 full test |
+| M3 | `COMPLETED / FULL_TEST_PENDING` | smoke 与 full 命令/检查点已隔离；formal 50 epoch 已在 GPU 1 完成（最后日志 epoch 49 / `global_step=10000`）；full test 的 Popen 与 NPZ object-format 兼容问题均已修复，针对性测试 3 passed、全量测试 30 passed/4 skipped，待最终重跑 full test |
 | M4 | `IMPLEMENTED / BLOCKED_NEEDS_REFERENCE_REVIEW` | H/A 共用 EnrollmentResult、全参考质量池化、end-of-session runner 已实现；尚无人工 H-human 核验 |
 | M5 | `IMPLEMENTED / VERIFIED` | 统一 Mega runtime/preprocess、ROIAlign 部位证据、B1 fusion、EvidenceMatcher、三层 gallery、pending promotion gate 已实现并有测试 |
 | M6 | `NOT_APPLICABLE` | O2/idtracker.ai/idmatcherai/CowIDentifier 缺输入或许可 |
@@ -42,6 +42,7 @@ session-level 冻结划分已实际写入 `MAT_workspace/assets/manifests/splits
 
 - `mat baseline sleap-gerbils --stage train-full --device auto --gpu-index 1 --full-epochs 50` 已完成；父 PID 13938、SLEAP 子 PID 14046，子进程 `CUDA_VISIBLE_DEVICES=1`，训练 return code 0。收据在 `runs/sleap_gerbils_pose_full/formal_training_launch.json`，最后日志 epoch 49 / `global_step=10000`，正式 checkpoint SHA-256 为 `0399099f64a283656c86fc901753b0d835e33c29b11890ff95120f98badf1d10`。
 - 首次自动 full test 于训练退出后触发，但 `SleapNNBackend._run` 使用了 `Popen(capture_output=True)`，被 Python 拒绝而以 return code 1 结束；已改为显式 `stdout/stderr=subprocess.PIPE`，新增回归测试，针对性测试 **2 passed**、全量测试 **29 passed, 4 skipped**。修复后的 full test 将只运行一次，不重跑已完成训练。
+- 修复 Popen 后的 full test 已完成预测并生成官方 metrics，但后端以 `allow_pickle=False` 读取 SLEAP legacy object NPZ 时失败；已核验官方 JSON sidecar 格式并改为优先读取 sidecar（仅保留本地 evaluator 输出的兼容回退），新增 eval 回归测试。当前针对性测试 **3 passed**、全量测试 **30 passed, 4 skipped**；最终 full test 待重跑。
 
 - 运行时审计：`MAT_workspace/upstream_audit/sleap_nn/version.txt` 为 `sleap-nn 0.3.3`；`config_help.txt`、`train_help.txt`、`predict_help.txt`、`eval_help.txt` 为本机 CLI 原文。`train_help.txt` 已核验 `trainer_config.resume_ckpt_path`。
 - MegaDescriptor-T-224：HF revision `3ea58ff6c6195bc748bb86c111ff40c32bdddcba`；config 609 B/SHA `27ef9cc22f677980785e0778fada1bbc03a9f6a294333756f308638f2e83b86c`，weights 204,267,588 B/SHA `62f53e6335d5f8ea4d764c91b442f8daa5ce7f316d388cc890e06c943218190c`，均 `AUTHORIZED_PROXY` 收据，MIT。`IdentityPreprocessSpec` 与 torchvision BCHW bicubic reference 的 audit 为 `EQUIVALENT`（max/mean abs error 0）。
