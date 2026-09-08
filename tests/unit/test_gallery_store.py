@@ -16,6 +16,6 @@ def test_gallery_anchor_immutable_and_versioned(tmp_path):
     new = store.commit([pid], snap.version)
     assert new.version != snap.version
     assert new.identities["id:a"].anchor_refs == ("anchor-0",)
+    np.testing.assert_array_equal(new.descriptors["id:a"].global_feature, d.global_feature)
     with pytest.raises(Exception): store.commit([pid], new.version)
     store.close()
-

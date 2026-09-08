@@ -52,12 +52,33 @@ class GlobalIdentityBackend:
     def from_local(cls, checkpoint: Path, *, architecture: str = "swin_tiny_patch4_window7_224",
                    config_path: Path | None = None, expected_sha256: str | None = None,
                    device: str = "cpu") -> "GlobalIdentityBackend":
-        """Construct a model without ``hf-hub``/``pretrained=True`` network access."""
+        """Construct a model without ``hf-hub``/``pretrained=True`` network access.
+
+        A MegaDescriptor checkpoint is not interchangeable with an ImageNet
+        Swin checkpoint.  Therefore a local model config is mandatory (or must
+        sit next to the checkpoint as ``config.json``) and its architecture and
+        feature dimension are checked before any state dict is loaded.
+        """
         if not checkpoint.is_file():
             raise MissingAssetError(f"missing identity checkpoint: {checkpoint}")
         digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
         if expected_sha256 and digest != expected_sha256:
             raise MissingAssetError("identity checkpoint SHA-256 mismatch")
+        config_path = config_path or checkpoint.with_name("config.json")
+        if not config_path.is_file():
+            raise MissingAssetError("MegaDescriptor config.json is required to verify architecture")
+        try:
+            import json
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise ValidationError(f"invalid identity model config: {config_path}") from exc
+        configured_architecture = config.get("architecture")
+        if configured_architecture != architecture:
+            raise ValidationError(
+                f"identity architecture mismatch: config={configured_architecture!r}, requested={architecture!r}"
+            )
+        if config.get("num_classes", 0) not in (0, None):
+            raise ValidationError("identity checkpoint config must have num_classes=0")
         try:
             import torch
             import timm
@@ -80,7 +101,7 @@ class GlobalIdentityBackend:
         if non_head_missing or non_head_unexpected:
             raise MissingAssetError(f"checkpoint backbone mismatch: missing={non_head_missing}, unexpected={non_head_unexpected}")
         model.to(device).eval()
-        preprocess_fingerprint = hashlib.sha256(config_path.read_bytes()).hexdigest() if config_path else "config-unresolved"
+        preprocess_fingerprint = hashlib.sha256(config_path.read_bytes()).hexdigest()
         return cls(model, model_hash=digest, preprocess_fingerprint=preprocess_fingerprint, device=device)
 
 

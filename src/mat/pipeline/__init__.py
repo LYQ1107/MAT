@@ -1,4 +1,3 @@
-from .cohort import CohortRunner
+from .cohort import CohortRunner, LongitudinalCohortRunner
 
-__all__ = ["CohortRunner"]
-
+__all__ = ["CohortRunner", "LongitudinalCohortRunner"]

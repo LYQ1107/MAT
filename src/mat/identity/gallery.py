@@ -117,6 +117,9 @@ class GalleryStore:
     def create(self, enrollment: EnrollmentResult) -> GallerySnapshot:
         if enrollment.status.startswith("BLOCKED"):
             raise ProtocolError(f"cannot create gallery from {enrollment.status} enrollment")
+        fingerprints = {descriptor.encoder_fingerprint for descriptor in enrollment.descriptors.values()}
+        if len(fingerprints) != 1:
+            raise ProtocolError("all gallery anchors must share one encoder fingerprint")
         version = "v0"
         payload = self._snapshot_json(enrollment, version)
         with self._conn:
@@ -206,7 +209,11 @@ class GalleryStore:
                                           descriptor["part_valid"], descriptor["part_quality"], descriptor["encoder_fingerprint"])
                 if desc.encoder_fingerprint != current.descriptors[uid].encoder_fingerprint:
                     raise ProtocolError("feature-space fingerprint mismatch")
-                descriptors[uid] = desc
+                # ``descriptors`` is the immutable S0 anchor index used by B0.
+                # Candidate evidence is retained in the proposal/event audit
+                # trail, while confirmed/quarantine exemplars live in the
+                # longitudinal gallery.  Never replace an anchor descriptor
+                # in this legacy static store.
             refs = list(identities[uid].committed_refs)
             refs.extend(data.get("source_observation_uids", []))
             identities[uid] = PersistentIdentity(identities[uid].identity_uid, identities[uid].cohort_uid,
