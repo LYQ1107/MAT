@@ -398,6 +398,9 @@ def _dispatch_identity_runtime(args, work: Path) -> int | None:
     command.extend(["--work-root", str(work)])
     env = dict(os.environ)
     env["MAT_IDENTITY_RUNTIME_DISPATCHED"] = "1"
+    env["HF_HUB_OFFLINE"] = "1"
+    env["TRANSFORMERS_OFFLINE"] = "1"
+    env["WANDB_MODE"] = "offline"
     source_root = str(ROOT / "src")
     env["PYTHONPATH"] = source_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     result = subprocess.run(command, cwd=str(ROOT), env=env, check=False)
