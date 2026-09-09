@@ -21,6 +21,7 @@ from mat.assets.catalog import AssetSpec
 from mat.data.adapters import RatIDAdapter, PigReIDAdapter, PigTrackingAdapter, MultiCamCowsAdapter, SleapGerbilsAdapter
 from mat.data.sanitize import validate_neutral_manifest
 from mat.data.splits import freeze_by_field
+from mat.data.gerbil_longitudinal_split import build_gerbil_longitudinal_protocol
 from mat.core.validation import validate_protocol
 from mat.core.errors import MATError, MissingAssetError
 
@@ -887,6 +888,14 @@ def split_freeze(args) -> int:
     split.write(out); print(out); return 0
 
 
+def split_gerbil_longitudinal(args) -> int:
+    work = _work_root(args.work_root)
+    output = Path(args.output) if args.output else None
+    protocol = build_gerbil_longitudinal_protocol(work, seed=args.seed, output=output)
+    print(json.dumps(protocol.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def blocked_stage(args) -> int:
     work = _work_root(getattr(args, "work_root", None)); stage = args.stage
     reason = {"features": "BLOCKED_MISSING_ASSET", "reference": "BLOCKED_MISSING_FRONTEND", "enroll": "BLOCKED_MISSING_FRONTEND", "run": "BLOCKED_MISSING_FRONTEND", "evaluate": "BLOCKED_MISSING_TRUTH"}.get(stage, "BLOCKED")
@@ -971,6 +980,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=experiment_identity)
     split = sub.add_parser("split").add_subparsers(dest="split_cmd", required=True)
     p = split.add_parser("freeze"); p.add_argument("--manifest", required=True); p.add_argument("--field", default="cohort_uid"); p.add_argument("--seed", type=int, default=17); p.add_argument("--output"); p.add_argument("--work-root"); p.set_defaults(func=split_freeze)
+    p = split.add_parser("gerbil-longitudinal"); p.add_argument("--seed", type=int, default=17); p.add_argument("--output"); p.add_argument("--work-root"); p.set_defaults(func=split_gerbil_longitudinal)
     p = sub.add_parser("features").add_subparsers(dest="features_cmd", required=True).add_parser("extract"); p.add_argument("--config", required=True); p.add_argument("--scope", choices=["pilot", "full"], default="pilot"); p.add_argument("--work-root"); p.set_defaults(func=lambda a: blocked_stage(type("Args", (), {"stage":"features", "work_root":a.work_root})()))
     p = sub.add_parser("train").add_subparsers(dest="train_cmd", required=True).add_parser("source"); p.add_argument("--config", required=True); p.add_argument("--scope", choices=["pilot", "full"], default="pilot"); p.add_argument("--seed", type=int, default=17); p.add_argument("--work-root"); p.set_defaults(func=train_source)
     for name, command in [("reference", "export"), ("enroll", None), ("run", "cohort"), ("evaluate", None)]:

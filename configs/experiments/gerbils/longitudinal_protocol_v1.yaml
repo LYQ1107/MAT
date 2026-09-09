@@ -1,0 +1,10 @@
+schema_version: mat.gerbil_longitudinal_protocol.v1
+protocol_file: assets/manifests/splits/gerbils_longitudinal_v1.json
+reference_role: reference_sessions
+development_role: development_sessions
+sealed_test_role: sealed_test_sessions
+identity_labels: [female, male, "pup shaved", "pup unshaved"]
+ordering_basis: deterministic_session_uid_fallback
+query_gt_usage: evaluator_only
+pose_model_training_protocol: official_random_frame_split
+diagnostic_only: true
