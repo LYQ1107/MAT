@@ -2,14 +2,22 @@
 
 本表只记录真实执行事实。官方 random frame split 结果不能解释为 strict longitudinal generalization；`example_tracking.slp` 不是人工 GT。`NOT_RUN`/`null` 表示没有满足数据、权重或标注条件，不是零分。
 
+`B0_global_static_gallery` 旧行是历史 all-non-S0 diagnostic：其 F1
+`0.5993150684931506` 明确为 `INVALID_NONSTANDARD_F1`，不可与下方标准
+sealed-only 结果比较；更正说明和原始 receipt 位置见
+[`RESULTS_PROTOCOL_CORRECTION.md`](RESULTS_PROTOCOL_CORRECTION.md)。
+
 | Method | Pose source | ID feature | Matcher | Memory | Enrollment | Persistent ID | Unknown | ID-aware Pose |
 |---|---|---|---|---|---|---|---|---|
 | SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE (smoke) | SLEAP-NN 0.3.3 bottomup，2 epochs CPU，`global_step=2` | NOT_RUN（smoke 仅为姿态链路验证） | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
 | SLEAP_OFFICIAL_RANDOM_SPLIT_BASELINE (formal) | SLEAP-NN 0.3.3 bottomup，GPU 1，50 epochs；full test 42 labeled frames/197 instances，官方 eval `SUCCEEDED`：mOKS 0.4020、OKS mAP 0.1087/mAR 0.1392、mPCK 0.2567、平均距离 8.7908 px | NOT_RUN（pose baseline 之外未训练 identity） | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
 | B0_global_static_gallery | formal full pose checkpoint；oracle crops 仅用于诊断 | MegaDescriptor-T-224（官方本地文件已校验） | global cosine（static gallery） | static S0 snapshot（gallery `v0→v0`） | `H_oracle_reference`，S0=`0b1d08252e086969ba10`，anchors=`16/16/9/16` | accuracy `0.36764705882352944`（1428 query instances，correct 525） | `201` | NOT_RUN — `BLOCKED_NEEDS_POSE_GT` |
-| B1_part_static | SLEAP pose + pose-derived ROI（代码/契约 forward） | global + ROIAlign head/trunk/tail parts | fixed quality-weighted fusion（代码已实现） | static | NOT_RUN | NOT_RUN | null | NOT_RUN |
+| B0 oracle strict (corrected) | oracle GT pose bbox；固定 protocol sealed-only | MegaDescriptor-T-224 | global cosine + deterministic greedy | frozen S0 | `H_oracle_reference`，sealed truth=252 | accuracy `0.428571` / macro-F1 `0.401719` / micro-F1 `0.440816`；accepted/correct/wrong/unknown=`238/108/130/14` | `14` | pose GT 仅为诊断上限 |
+| B0 predicted-pose strict | SLEAP full-checkpoint predicted instances；末端 geometry evaluator | MegaDescriptor-T-224 | global cosine + deterministic greedy | frozen S0 | predicted 197；sealed truth=252，located=26 | accuracy `0.035714` / macro-F1 `0.055815` / micro-F1 `0.064982`；accepted/correct/wrong/unknown=`25/9/16/227` | `227` | geometry matched after ID |
+| B1 oracle part strict | oracle GT pose + ROIAlign parts（诊断） | global + head/trunk/tail parts | fixed quality-weighted fusion；development weight=`0.0` | frozen S0 | sealed truth=252 | accuracy `0.464286` / macro-F1 `0.421854` / micro-F1 `0.478528`；accepted/correct/wrong/unknown=`237/117/120/15` | `15` | not end-to-end H/A |
+| B1 predicted part strict | SLEAP predicted keypoints + ROIAlign parts | global + head/trunk/tail parts | fixed quality-weighted fusion；development weight=`0.5` | frozen S0 | predicted 197；sealed truth=252，located=26 | accuracy `0.047619` / macro-F1 `0.071770` / micro-F1 `0.086331`；accepted/correct/wrong/unknown=`26/12/14/226` | `226` | geometry matched after ID |
 | B1 EvidenceMatcher | NOT_RUN | global/part pair MLP（实现但未训练） | trainable evidence head | static | NOT_RUN | NOT_RUN | null | NOT_RUN |
-| B2 safe longitudinal memory | NOT_RUN | NOT_RUN | NOT_RUN | anchor/confirmed/pending + end-of-session（实现但未运行） | NOT_RUN | NOT_RUN | null | NOT_RUN |
+| B2 safe longitudinal memory | NOT_RUN | NOT_RUN | NOT_RUN | anchor/confirmed/pending + end-of-session（anchor update 不可在本轮伪造） | NOT_RUN | NOT_RUN | null | NOT_RUN |
 
 ## 可复核运行事实
 

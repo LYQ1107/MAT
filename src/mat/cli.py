@@ -786,17 +786,129 @@ def baseline_sleap_gerbils(args) -> int:
     return 0 if manifest["status"] == "SUCCEEDED" else 2
 
 
+def _protocol_for_config(work: Path, config: dict[str, Any]):
+    from mat.data.gerbil_longitudinal_split import GerbilLongitudinalProtocol
+    value = config.get("protocol_file")
+    if not value:
+        raise MissingAssetError("strict identity config must declare protocol_file")
+    path = Path(str(value))
+    if not path.is_absolute():
+        path = work / path
+    if not path.is_file():
+        raise MissingAssetError(f"missing frozen longitudinal protocol: {path}")
+    return GerbilLongitudinalProtocol.read(path), path
+
+
+def _prediction_session_map(protocol, session_rows: list[dict[str, Any]]) -> dict[str, str]:
+    # Keep only unambiguous aliases.  A generic ``video0``/basename alias can
+    # occur in more than one materialized SLP; silently overwriting it would
+    # bind pose predictions to the wrong session.  The adapter can still use
+    # exact ``source_name#videoN`` aliases and will reject any remaining
+    # ambiguity rather than guessing.
+    candidates: dict[str, set[str]] = {}
+    wanted = set(protocol.all_role_sessions)
+    for row in session_rows:
+        uid = str(row.get("session_uid", ""))
+        if uid not in wanted:
+            continue
+        source_filename = str(row.get("source_filename", ""))
+        source_video_name = str(row.get("source_video_name", ""))
+        video_index = row.get("video_index")
+        keys = {source_video_name, source_filename}
+        if video_index is not None:
+            keys.update({f"video{int(video_index)}", str(int(video_index))})
+            if source_filename:
+                keys.add(f"{Path(source_filename).name}#video{int(video_index)}")
+        for key in keys:
+            if key:
+                candidates.setdefault(key, set()).add(uid)
+    return {key: next(iter(values)) for key, values in candidates.items() if len(values) == 1}
+
+
+def _import_sleap_prediction_adapter(work: Path):
+    """Import SLEAP-IO only in the local identity child runtime."""
+    # The control interpreter intentionally has no SLEAP dependency.  The
+    # child receives the audited local site-package overlays and remains
+    # offline; importing here does not modify the parent process environment.
+    for value in _sleap_runtime_env(work).get("PYTHONPATH", "").split(os.pathsep):
+        if value and value not in sys.path:
+            sys.path.insert(0, value)
+    from mat.data.predictions.sleap_pose import SleapPosePredictionAdapter
+    return SleapPosePredictionAdapter
+
+
+def _load_prediction_instances_subprocess(work: Path, prediction_path: Path,
+                                          session_map: dict[str, str],
+                                          pose_model_fingerprint: str):
+    """Parse SLP in a Python-3.11 SLEAP runtime and return neutral records.
+
+    The identity child deliberately uses the local torch/timm environment,
+    which is Python 3.10 on this host.  SLEAP-IO's verified wheel and the
+    prepared NumPy/HDF5 stack are Python 3.11, so parsing is isolated in a
+    separate local subprocess and serialized as plain JSON.  No network or
+    proxy environment is changed.
+    """
+    executable = Path("/home/lwr/anaconda3/envs/masaenv/bin/python")
+    if not executable.is_file():
+        raise MissingAssetError("local Python 3.11 runtime for SLEAP-IO is absent")
+    import base64
+    payload = base64.b64encode(json.dumps(session_map, ensure_ascii=False).encode("utf-8")).decode("ascii")
+    script = (
+        "import base64,json,sys; from dataclasses import asdict; "
+        "from mat.data.predictions.sleap_pose import SleapPosePredictionAdapter; "
+        "m=json.loads(base64.b64decode(sys.argv[3]).decode()); "
+        "x=SleapPosePredictionAdapter(pose_model_fingerprint=sys.argv[2]).load(sys.argv[1],m); "
+        "print(json.dumps([asdict(v) for v in x],default=lambda z:z.tolist() if hasattr(z,'tolist') else z))"
+    )
+    env = _sleap_runtime_env(work)
+    env["HF_HUB_OFFLINE"] = "1"
+    env["TRANSFORMERS_OFFLINE"] = "1"
+    result = subprocess.run([str(executable), "-c", script, str(prediction_path),
+                             str(pose_model_fingerprint), payload], env=env,
+                            capture_output=True, text=True, timeout=300, check=False)
+    if result.returncode != 0:
+        raise MissingAssetError(f"SLEAP prediction parser failed: {result.stderr[-2000:]}")
+    try:
+        from mat.core.types import PredictedPoseInstance
+        raw = json.loads(result.stdout.strip().splitlines()[-1])
+        return [PredictedPoseInstance(**row) for row in raw]
+    except Exception as exc:
+        raise MissingAssetError(f"invalid serialized SLEAP prediction records: {exc}") from exc
+
+
+def _load_gerbil_species() -> Any:
+    """Load the versioned gerbil skeleton/part groups from repository YAML."""
+    import yaml
+    from mat.core.types import SpeciesSpec
+    raw = yaml.safe_load((ROOT / "configs" / "species" / "gerbil.yaml").read_text(encoding="utf-8")) or {}
+    names = tuple(str(value) for value in raw.get("keypoints", ()))
+    index = {name: i for i, name in enumerate(names)}
+    edges = tuple((index[str(edge[0])], index[str(edge[1])]) for edge in raw.get("edges", ()))
+    parts = {str(name): tuple(index[str(value)] for value in values)
+             for name, values in (raw.get("part_groups") or {}).items()}
+    return SpeciesSpec(name=str(raw.get("species_id", "gerbil")), skeleton_version=str(raw.get("schema_version", "gerbil")),
+                       keypoint_names=names, edges=edges, part_groups=parts,
+                       flip_index=None, supported_views=("top",), pose_asset_id="sleap_gerbils")
+
+
 def experiment_identity(args) -> int:
-    """Dispatch the file-backed B0 runner after a measured full pose run."""
+    """Run a file-backed identity experiment with a frozen session protocol."""
     work = _work_root(args.work_root)
     default_configs = {
-        "b0": ROOT / "configs" / "experiments" / "gerbils" / "B0_oracle_crop_diagnostic.yaml",
-        "b1": ROOT / "configs" / "experiments" / "gerbils" / "B1_part_static.yaml",
-        "b2": ROOT / "configs" / "experiments" / "gerbils" / "B2_learned_matcher.yaml",
-        "o1": ROOT / "configs" / "experiments" / "gerbils" / "O1_safe_memory.yaml",
+        "b0": ROOT / "configs" / "experiments" / "gerbils" / "B0_oracle_strict.yaml",
+        "b1": ROOT / "configs" / "experiments" / "gerbils" / "B1_oracle_part_strict.yaml",
+        "b2": ROOT / "configs" / "experiments" / "gerbils" / "B2_s0_matcher_strict.yaml",
+        "o1": ROOT / "configs" / "experiments" / "gerbils" / "O1_static_memory.yaml",
     }
     config = Path(args.config) if args.config else default_configs[args.experiment]
-    run_dir = work / "runs" / f"{args.experiment}_gerbils"
+    run_label = args.experiment
+    try:
+        import yaml
+        config_preview = yaml.safe_load(config.read_text(encoding="utf-8")) or {} if config.is_file() else {}
+        run_label = str(config_preview.get("experiment_id", run_label)).lower()
+    except Exception:
+        pass
+    run_dir = work / "runs" / f"{run_label}_gerbils"
     run_dir.mkdir(parents=True, exist_ok=True)
     started_at = datetime.now(timezone.utc).isoformat()
     checkpoint = (Path(args.identity_checkpoint).expanduser().resolve() if args.identity_checkpoint else
@@ -815,11 +927,6 @@ def experiment_identity(args) -> int:
                               "metrics": None, "blockers": []}
     if not config.is_file():
         result["status"] = "BLOCKED_MISSING_CONFIG"; result["blockers"].append(str(config))
-    elif args.experiment != "b0":
-        # B1/B2/O1 are intentionally not represented by a fake asset blocker;
-        # they can only be promoted after a measured B0 result and currently
-        # have no implemented file-backed runner.
-        raise NotImplementedError(f"{args.experiment.upper()} file-backed runner is not implemented")
     elif pose_checkpoint is None:
         result["status"] = "BLOCKED_MISSING_FULL_POSE_CHECKPOINT"
         result["blockers"].append("full pose best.ckpt is required; smoke checkpoints are never accepted")
@@ -827,6 +934,31 @@ def experiment_identity(args) -> int:
         result["status"] = "BLOCKED_MISSING_IDENTITY_ASSET"
         result["blockers"].append("verified local MegaDescriptor-T-224 checkpoint/config is absent")
     else:
+        try:
+            config_raw = _load_config(config)
+        except Exception as exc:
+            result["status"] = "BLOCKED_INVALID_CONFIG"; result["blockers"].append(f"{type(exc).__name__}: {exc}")
+            config_raw = {}
+        protocol = None
+        protocol_path = None
+        if result["status"] == "RUNNING" and config_raw.get("protocol_file"):
+            try:
+                protocol, protocol_path = _protocol_for_config(work, config_raw)
+                result["protocol_id"] = protocol.protocol_id
+                result["protocol_file"] = str(protocol_path)
+                result["protocol_roles"] = {
+                    "reference_sessions": list(protocol.reference_sessions),
+                    "source_sessions": list(protocol.source_sessions),
+                    "development_sessions": list(protocol.development_sessions),
+                    "sealed_test_sessions": list(protocol.sealed_test_sessions),
+                }
+                result["protocol_ordering_basis"] = protocol.ordering_basis
+                result["protocol_identity_evidence"] = protocol.provider_identity_evidence
+            except Exception as exc:
+                result["status"] = "BLOCKED_INVALID_PROTOCOL"; result["blockers"].append(f"{type(exc).__name__}: {exc}")
+        if args.experiment not in {"b0", "b1"} and result["status"] == "RUNNING":
+            result["status"] = "BLOCKED_EXPERIMENT_NOT_IMPLEMENTED"
+            result["blockers"].append(f"{args.experiment.upper()} strict runner is not yet available")
         baseline_manifest = work / "runs" / "sleap_gerbils_baseline" / "run_manifest.json"
         pose_manifest = json.loads(baseline_manifest.read_text(encoding="utf-8")) if baseline_manifest.is_file() else {}
         result["dataset_sha256"] = pose_manifest.get("dataset_sha256")
@@ -849,23 +981,74 @@ def experiment_identity(args) -> int:
         model_config = checkpoint.with_name("config.json")
         if result["status"] == "RUNNING":
             try:
-                encoder = GlobalIdentityBackend.from_local(checkpoint, config_path=model_config)
+                import yaml
+                from mat.config.identity import IdentityMatchingConfig
                 from mat.experiments.gerbil_identity import (load_prepared_gerbil_samples,
-                    load_private_gerbil_truth, load_session_inventory,
-                    run_b0_oracle_crop_diagnostic)
+                    load_private_gerbil_truth, load_session_inventory, run_b0_strict)
+                encoder = GlobalIdentityBackend.from_local(checkpoint, config_path=model_config)
                 samples, _ = load_prepared_gerbil_samples(work)
                 truth = load_private_gerbil_truth(work)
                 sessions = load_session_inventory(work)
+                match_config = IdentityMatchingConfig.from_mapping(config_raw.get("matching"))
+                input_mode = str((config_raw.get("input_mode") or {}).get("pose", "oracle"))
+                if input_mode not in {"oracle", "predicted"}:
+                    raise ValueError(f"unsupported strict B0 input_mode: {input_mode}")
+                predicted_instances = None
+                if input_mode == "predicted":
+                    prediction_path = pose_manifest.get("test_prediction")
+                    if not prediction_path or not Path(prediction_path).is_file():
+                        raise MissingAssetError("formal pose test prediction SLP is required for predicted-pose B0")
+                    session_map = _prediction_session_map(protocol, sessions)
+                    predicted_instances = _load_prediction_instances_subprocess(
+                        work, Path(prediction_path), session_map,
+                        str(result.get("pose_checkpoint_hash") or "unresolved"))
+                    result["predicted_pose_instances"] = len(predicted_instances)
+                    result["predicted_pose_path"] = str(prediction_path)
                 gallery_path = run_dir / "gallery.sqlite"
+                if gallery_path.exists():
+                    # A rerun after a parser/evaluator fix must not mutate the
+                    # prior frozen snapshot.  Keep the old receipt and create
+                    # a new explicitly numbered local registry.
+                    index = 2
+                    while (run_dir / f"gallery_run{index}.sqlite").exists():
+                        index += 1
+                    gallery_path = run_dir / f"gallery_run{index}.sqlite"
                 gallery = __import__("mat.identity.gallery", fromlist=["GalleryStore"]).GalleryStore(gallery_path)
-                b0 = run_b0_oracle_crop_diagnostic(samples, truth, encoder, gallery, sessions,
-                                                   cohort_uid="gerbils-b0-oracle")
+                if args.experiment == "b0":
+                    b0 = run_b0_strict(samples, truth, encoder, gallery,
+                                       reference_sessions=protocol.reference_sessions,
+                                       development_sessions=protocol.development_sessions,
+                                       sealed_test_sessions=protocol.sealed_test_sessions,
+                                       input_mode=input_mode, predicted_instances=predicted_instances,
+                                       matching_config=match_config, cohort_uid=f"gerbils-{run_label}",
+                                       protocol_id=protocol.protocol_id)
+                else:
+                    from mat.experiments.gerbil_part_identity import run_b1
+                    from mat.models.part_encoder import PartAwareIdentityEncoder
+                    part_encoder = PartAwareIdentityEncoder(encoder, _load_gerbil_species())
+                    candidates = (config_raw.get("matching") or {}).get(
+                        "global_weight_candidates", [0.0, 0.25, 0.5, 0.75, 1.0])
+                    b0 = run_b1(samples=samples, truth=truth, encoder=part_encoder, gallery_store=gallery,
+                                 reference_sessions=protocol.reference_sessions,
+                                 development_sessions=protocol.development_sessions,
+                                 sealed_test_sessions=protocol.sealed_test_sessions,
+                                 identity_labels=protocol.identity_labels, input_mode=input_mode,
+                                 predicted_instances=predicted_instances, matching_config=match_config,
+                                 global_weight_candidates=candidates, cohort_uid=f"gerbils-{run_label}",
+                                 protocol_id=protocol.protocol_id)
                 b0.write(run_dir / "b0_result.json")
+                if b0.calibration:
+                    _write_json(run_dir / "development_calibration.json", b0.calibration)
                 gallery.close()
                 result["status"] = b0.status
                 result["metrics"] = b0.metrics
                 result["s0_sessions"] = list(b0.s0_sessions)
+                result["reference_sessions"] = list(b0.reference_sessions)
+                result["development_sessions"] = list(b0.development_sessions)
+                result["sealed_test_sessions"] = list(b0.sealed_test_sessions)
                 result["anchor_counts"] = b0.anchor_counts
+                result["threshold"] = b0.threshold
+                result["calibration"] = b0.calibration
                 result["gallery_start_version"] = b0.gallery_version
                 result["gallery_end_version"] = b0.gallery_version
                 if b0.blocker:
@@ -910,7 +1093,23 @@ def train_source(args) -> int:
 
 def config_validate(args) -> int:
     raw = _load_config(Path(args.config))
-    validate_protocol(raw.get("protocol", {})); print("SMOKE_PASSED"); return 0
+    if raw.get("protocol"):
+        validate_protocol(raw.get("protocol", {}))
+    elif raw.get("protocol_file"):
+        # Strict longitudinal configs use an immutable protocol artifact and
+        # explicit role names instead of the legacy nested protocol block.
+        required = {"protocol_file", "reference_role", "development_role", "sealed_test_role", "input_mode", "matching"}
+        missing = sorted(required - set(raw))
+        if missing:
+            raise MATError(f"strict identity config missing keys: {', '.join(missing)}")
+        from mat.config.identity import IdentityMatchingConfig
+        IdentityMatchingConfig.from_mapping(raw.get("matching"))
+        pose = raw.get("input_mode", {}).get("pose") if isinstance(raw.get("input_mode"), dict) else None
+        if pose not in {"oracle", "predicted"}:
+            raise MATError("strict identity config input_mode.pose must be oracle or predicted")
+    else:
+        raise MATError("config must contain legacy protocol or strict protocol_file")
+    print("SMOKE_PASSED"); return 0
 
 
 def _load_config(path: Path) -> dict[str, Any]:

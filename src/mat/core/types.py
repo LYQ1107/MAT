@@ -193,3 +193,52 @@ class LocalAssociation:
     box_xyxy: tuple[float, float, float, float]
     state: str
 
+
+@dataclass(frozen=True)
+class PredictedPoseInstance:
+    """A pose instance emitted by a detector, before any identity evaluation.
+
+    This contract deliberately contains no provider/GT identifier.  A
+    ``prediction_uid`` is generated from the source session, frame and local
+    prediction index; ``local_track_uid`` (when present) remains a local
+    tracker handle and is never promoted to a persistent identity.
+    """
+
+    prediction_uid: str
+    session_uid: str
+    frame_index: int
+    timestamp_s: float
+
+    bbox_xyxy: np.ndarray
+    keypoints_xy: np.ndarray
+    keypoint_scores: np.ndarray
+    keypoint_valid: np.ndarray
+
+    detection_score: float | None
+    local_track_uid: str | None
+
+    pose_model_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not self.prediction_uid or not self.session_uid or not self.pose_model_fingerprint:
+            raise ValidationError("predicted pose identifiers/fingerprint must be non-empty")
+        if int(self.frame_index) < 0 or not math.isfinite(float(self.timestamp_s)):
+            raise ValidationError("predicted pose frame/timestamp is invalid")
+        box = np.asarray(self.bbox_xyxy, dtype=np.float32)
+        points = np.asarray(self.keypoints_xy, dtype=np.float32)
+        scores = np.asarray(self.keypoint_scores, dtype=np.float32)
+        valid = np.asarray(self.keypoint_valid, dtype=bool)
+        if box.shape != (4,) or not np.isfinite(box).all() or box[2] <= box[0] or box[3] <= box[1]:
+            raise ValidationError("predicted pose bbox must be finite xyxy with positive area")
+        if points.ndim != 2 or points.shape[1] != 2:
+            raise ValidationError("predicted pose keypoints must be Kx2")
+        if scores.shape != (points.shape[0],) or valid.shape != scores.shape:
+            raise ValidationError("predicted pose keypoint score/valid shapes disagree")
+        if np.isinf(points).any() or np.isinf(scores).any():
+            raise ValidationError("predicted pose keypoints/scores cannot contain infinity")
+        if self.detection_score is not None and not math.isfinite(float(self.detection_score)):
+            raise ValidationError("predicted pose detection_score must be finite or None")
+        object.__setattr__(self, "bbox_xyxy", box)
+        object.__setattr__(self, "keypoints_xy", points)
+        object.__setattr__(self, "keypoint_scores", scores)
+        object.__setattr__(self, "keypoint_valid", valid)

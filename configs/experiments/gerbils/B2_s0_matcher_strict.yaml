@@ -1,0 +1,34 @@
+schema_version: mat.identity_experiment.v2
+experiment_id: B2_s0_matcher_strict
+dataset: sleap_gerbils
+protocol_file: assets/manifests/splits/gerbils_longitudinal_v1.json
+reference_role: reference_sessions
+development_role: development_sessions
+sealed_test_role: sealed_test_sessions
+query_gt_usage: evaluator_only
+input_mode:
+  pose: predicted
+  crop: predicted_pose_parts
+pose_model_training_protocol: official_random_frame_split
+identity:
+  backend: wildlife_tools
+  descriptor: megadescriptor_t_224
+  checkpoint_scope: verified_local_only
+  feature_scope: global_plus_pose_parts
+  train_backbone: false
+matching:
+  mode: part_aware
+  solver: deterministic_greedy
+  top_k: 4
+  accept_threshold: null
+  threshold_calibration: development
+  calibration_objective: macro_f1
+  learned_matcher: evidence_matcher
+memory:
+  policy: frozen
+  immutable_anchor: true
+  update: disabled
+evaluation:
+  instance_matching: geometry_only_after_identity
+  sealed_truth_for_model: false
+diagnostic_only: true

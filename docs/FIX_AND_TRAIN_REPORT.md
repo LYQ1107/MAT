@@ -45,12 +45,16 @@ does not convert a smoke run into a formal result.
 10. **Oracle B0.** The file-backed runner selects deterministic earliest S0
     sessions covering four provider labels and at most 16 visible/time-spread
     `H_oracle_reference` anchors per identity.  Query truth is evaluator-only.
-11. **Predicted-pose B0.** `B0_predicted_pose.yaml` and the runner accept only
-    full SLEAP predictions for query boxes/keypoints; identity is assigned by
-    the model and evaluator matching never feeds query identity truth back.
-12. **B1/B2/O1.** These are not reported as runs until B0 has a measured full
-    pose input and identity result.  Missing implementations raise an explicit
-    `NotImplementedError`; no fake missing-asset receipt is emitted.
+11. **Predicted-pose B0.** The strict `B0_predicted_pose_strict.yaml` runner
+    accepts only full SLEAP predictions for query boxes/keypoints; identity is
+    assigned by the model and geometry-only evaluator matching never feeds
+    query identity truth back.  Predicted rows use `prediction_uid`; only an
+    explicit `evaluator_match` links a prediction to sealed truth.
+12. **B1/B2/O1 boundary.** After B0's measured full-pose gate, B1 fixed-fusion
+    oracle/predicted pilots were run under the same frozen protocol.  The
+    trainable `EvidenceMatcher`, B2 learned matcher and O1 memory remain
+    explicitly unavailable; their commands emit `BLOCKED_EXPERIMENT_NOT_IMPLEMENTED`
+    rather than a fake score or missing-asset success.
 13. **Full test and B0 completion.** The independent formal full test now
     succeeds with 42 labeled frames/197 instances (validation threshold 0.10:
     43 frames/198 instances) and official metrics are recorded in
@@ -68,4 +72,9 @@ does not convert a smoke run into a formal result.
     frames).  Labels are only `true_for_provider_labeled_sessions` because of
     shaved appearance; dense continuous pose GT, human H review and
     independent cross-day biological-ID mapping remain unavailable.  No
-    prediction is substituted for GT, and B1/B2 are not reported as runs.
+    prediction is substituted for GT.
+14. **Strict sealed correction.** P0–P6 implemented a standard fixed-label
+    evaluator, frozen protocol `92dd746577047d74`, SLEAP prediction adapter,
+    geometry-only instance matcher and B0/B1 sealed-only receipts.  Exact
+    corrected metrics and the legacy `0.599315` invalid-F1 explanation are in
+    `docs/RESULTS_PROTOCOL_CORRECTION.md`.

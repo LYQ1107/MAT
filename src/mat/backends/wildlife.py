@@ -88,6 +88,10 @@ class IdentityPreprocessSpec:
                 array = array[None, ...]
             if array.ndim != 4 or array.shape[-1] not in (1, 3, 4):
                 raise ValidationError("numpy identity images must be BHWC with 1, 3 or 4 channels")
+            # Lazy PIL-backed frames can be read-only; give torch a writable
+            # view so inference cannot trigger undefined-buffer warnings.
+            if not array.flags.writeable:
+                array = array.copy()
             tensor = torch.as_tensor(array).permute(0, 3, 1, 2)
         if tensor.shape[1] == 1:
             tensor = tensor.repeat(1, 3, 1, 1)

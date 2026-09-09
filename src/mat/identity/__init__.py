@@ -15,6 +15,7 @@ __all__ = [
 ]
 from .conflicts import ConflictGraph, ConflictGraphBuilder
 from .matching import PersistentMatcher, StaticGalleryMatcher
+from .part_matching import PartAwareStaticMatcher
 from .memory import UpdatePolicy, UpdateDecision
 
-__all__ = ["GallerySnapshot", "GalleryStore", "ConflictGraph", "ConflictGraphBuilder", "PersistentMatcher", "StaticGalleryMatcher", "UpdatePolicy", "UpdateDecision"]
+__all__ = ["GallerySnapshot", "GalleryStore", "ConflictGraph", "ConflictGraphBuilder", "PersistentMatcher", "StaticGalleryMatcher", "PartAwareStaticMatcher", "UpdatePolicy", "UpdateDecision"]

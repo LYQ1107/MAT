@@ -25,6 +25,7 @@ class MatchingPolicy:
     top_k: int = 3
     solver: str = "deterministic_greedy"
     model_version: str = "unresolved"
+    gallery_version: str = "unresolved"
 
 
 class PersistentMatcher:
@@ -84,11 +85,11 @@ class PersistentMatcher:
             candidate_scores = tuple(float(row[j]) for j in order if np.isfinite(row[j]))
             if tid in assignments:
                 result.append(Assignment(tid, assignments[tid], candidates, candidate_scores, "accepted",
-                                         tuple(reasons[tid]), "unresolved", policy.model_version))
+                                         tuple(reasons[tid]), policy.gallery_version, policy.model_version))
             else:
                 why = reasons[tid] or (["below_threshold"] if len(candidate_scores) else ["no_gallery_evidence"])
                 result.append(Assignment(tid, None, candidates, candidate_scores, "unregistered",
-                                         tuple(why), "unresolved", policy.model_version))
+                                         tuple(why), policy.gallery_version, policy.model_version))
         return result
 
 

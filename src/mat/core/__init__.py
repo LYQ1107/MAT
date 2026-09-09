@@ -8,6 +8,7 @@ from .types import (
     LocalAssociation,
     LocalTracklet,
     PersistentIdentity,
+    PredictedPoseInstance,
     ScoreMatrix,
     SessionSpec,
     SpeciesSpec,
@@ -18,5 +19,5 @@ __all__ = [
     "AnimalObservation", "Assignment", "DescriptorBatch", "FramePacket",
     "IdentityDescriptor", "LocalAssociation", "LocalTracklet", "PersistentIdentity",
     "ScoreMatrix", "SessionSpec", "SpeciesSpec",
+    "PredictedPoseInstance",
 ]
-
