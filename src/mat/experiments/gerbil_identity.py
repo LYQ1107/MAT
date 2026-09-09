@@ -7,7 +7,6 @@ through a separate evaluator argument and is never attached to a model row.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
@@ -332,32 +331,6 @@ def _gallery_from_oracle(samples: Sequence[GerbilInstanceSample], truth_by_obser
     return gallery_store.create(enrollment), sample_by_uid
 
 
-def _evaluate(assignments: Sequence[Any], truth_by_observation: Mapping[str, Mapping[str, Any]],
-              identity_names: Mapping[str, str]) -> dict[str, Any]:
-    confusion: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    correct = known = unknown = 0
-    for assignment in assignments:
-        uid = assignment.tracklet_uid
-        truth = truth_by_observation.get(uid, {})
-        target = truth.get("gt_identity")
-        if target is None:
-            continue
-        known += 1
-        predicted = identity_names.get(assignment.persistent_uid, "unknown") if assignment.persistent_uid else "unknown"
-        confusion[str(target)][str(predicted)] += 1
-        if predicted == target:
-            correct += 1
-        if predicted == "unknown":
-            unknown += 1
-    accuracy = correct / known if known else None
-    # A conservative micro-F1 over known identities; unknown predictions are
-    # counted as false negatives and never inflate identity performance.
-    f1 = (2 * correct / (known + correct - unknown)) if known and (known + correct - unknown) else None
-    return {"known_instances": known, "correct": correct, "unknown": unknown,
-            "accuracy": accuracy, "f1": f1,
-            "confusion": {key: dict(value) for key, value in sorted(confusion.items())}}
-
-
 @dataclass(frozen=True)
 class GerbilB0Result:
     status: str
@@ -415,12 +388,9 @@ def run_b0_oracle_crop_diagnostic(samples: Sequence[GerbilInstanceSample],
     scores = PersistentMatcher().score(tracklets, descriptors, snapshot)
     assigned = PersistentMatcher().assign(scores, ConflictGraphBuilder().build(tracklets),
                                            MatchingPolicy(model_version=snapshot.fingerprint))
-    names = {identity.identity_uid: str(identity.provenance.get("group_label", "unknown"))
-             for identity in snapshot.identities.values()}
-    metrics = _evaluate(assigned, truth_by_observation, names)
     return GerbilB0Result("SUCCEEDED", "oracle_crop_diagnostic", "H_oracle_reference", s0,
                           {key: len(value) for key, value in anchors.items()}, tuple(item.__dict__ for item in assigned),
-                          metrics, snapshot.version)
+                          {}, snapshot.version)
 
 
 def run_b0_predicted_pose(samples: Sequence[GerbilInstanceSample],
@@ -465,12 +435,9 @@ def run_b0_predicted_pose(samples: Sequence[GerbilInstanceSample],
     scores = PersistentMatcher().score(tracklets, descriptors, snapshot)
     assigned = PersistentMatcher().assign(scores, ConflictGraphBuilder().build(tracklets),
                                            MatchingPolicy(model_version=snapshot.fingerprint))
-    names = {identity.identity_uid: str(identity.provenance.get("group_label", "unknown"))
-             for identity in snapshot.identities.values()}
-    metrics = _evaluate(assigned, truth_by_observation, names)
     return GerbilB0Result("SUCCEEDED", "predicted_pose", "H_oracle_reference", s0,
                           {key: len(value) for key, value in anchors.items()}, tuple(item.__dict__ for item in assigned),
-                          metrics, snapshot.version)
+                          {}, snapshot.version)
 
 
 __all__ = ["LazyRGBImage", "GerbilInstanceSample", "GerbilB0Result", "bbox_from_keypoints", "select_s0_sessions",
